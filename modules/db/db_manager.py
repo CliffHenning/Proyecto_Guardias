@@ -1,5 +1,9 @@
 import sqlite3
-from .models import Profesor, Horario, Presencia, Ausencia, Guardia
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+
+from modules.db.models import Profesor, Horario, Presencia, Ausencia, Guardia
 
 class DBManager:
     def __init__(self, db_path="ies.db"):
@@ -100,6 +104,21 @@ class DBManager:
         row = cursor.fetchone()
         conn.close()
         return Presencia(*row) if row else None
+
+    def get_presencias_hoy(self):
+        """Obtiene todos los registros de presencia del día."""
+        from datetime import datetime
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM presencia
+            WHERE date(timestamp) = ?
+            ORDER BY profesor_id, timestamp
+        """, (hoy,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [Presencia(*row) for row in rows]
 
     def insert_presencia(self, presencia):
         """Registra entrada o salida."""

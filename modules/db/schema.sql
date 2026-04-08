@@ -7,7 +7,9 @@ CREATE TABLE profesores (
     rfid TEXT,
     huella_id TEXT,
     face_id TEXT,
-    activo INTEGER DEFAULT 1
+    activo INTEGER DEFAULT 1,
+    guardias_acumuladas INTEGER DEFAULT 0,
+    guardias_semana INTEGER DEFAULT 0
 );
 
 -- =========================

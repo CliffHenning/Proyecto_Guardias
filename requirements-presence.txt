@@ -1,22 +1,26 @@
-# Requirements for Presence Module
-# Install with: pip install -r requirements-presence.txt
+# Dependencias del proyecto Sistema de Gestión de Guardias
+# Instalar con: pip install -r requirements-presence.txt
 
-# Web framework
+# Framework web
 flask>=3.1.0
 
-# Serial communication (for fingerprint sensor)
+# Comunicación serie (sensor de huella dactilar)
 pyserial>=3.5
 
-# RFID reader (only works on Raspberry Pi)
-# mfrc522>=0.0.7  # Not available on Windows
+# Lector RFID (solo en Raspberry Pi)
+# mfrc522>=0.0.7
 
-# Facial recognition (only works on Raspberry Pi)
-# face-recognition>=1.3.0  # Not available on Windows
-# picamera2>=0.3.0  # Not available on Windows
+# Reconocimiento facial (solo en Raspberry Pi)
+# face-recognition>=1.3.0
+# picamera2>=0.3.0
 
 # Testing
 pytest>=7.0.0
+pytest-html>=4.0.0
 
-# Note: Hardware-specific libraries (mfrc522, face-recognition, picamera2)
-# are only needed when deploying on Raspberry Pi.
-# In development mode (Windows), manual input is used for testing.
+# Documentación
+mkdocs>=1.6.0
+mkdocs-material>=9.0.0
+
+# Nota: las librerías de hardware (mfrc522, face-recognition, picamera2)
+# solo son necesarias al desplegar en Raspberry Pi.

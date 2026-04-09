@@ -65,6 +65,19 @@ python -m pytest tests/ -v
 python -m pytest tests/ --html=report.html --self-contained-html
 ```
 
+Tambien puedes validar con un solo comando usando el script de PowerShell:
+
+```powershell
+# Solo tests (recomendado para comprobacion rapida)
+.\scripts\validar.ps1
+
+# Tests + informe HTML
+.\scripts\validar.ps1 -HtmlReport
+
+# Tests + docs MkDocs
+.\scripts\validar.ps1 -Docs
+```
+
 ## Documentación técnica
 
 ```bash

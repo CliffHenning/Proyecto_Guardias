@@ -2,11 +2,52 @@
 <html>
 <head>
     <title>Presencia</title>
+    <style>
+        .presente { color: green; }
+        .ausente { color: red; }
+        .flash { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+    </style>
 </head>
 <body>
     <h1>Control de Presencia</h1>
 
-    <p>Aquí irá la identificación de profesores.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form action="/presencia/registrar" method="post">
+        <button type="submit">Registrar Presencia</button>
+    </form>
+
+    <h2>Estado Actual del Profesorado</h2>
+    <table border="1">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Última Acción</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for profesor_id, info in estado.items() %}
+            <tr>
+                <td>{{ info.nombre }}</td>
+                <td class="{% if info.presente %}presente{% else %}ausente{% endif %}">
+                    {% if info.presente %}Presente{% else %}Ausente{% endif %}
+                </td>
+                <td>{{ info.ultima_accion or 'N/A' }}</td>
+                <td>{{ info.timestamp or 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
     <a href="/">Volver</a>
 </body>

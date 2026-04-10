@@ -6,7 +6,6 @@ disponibilidad de profesores y asignación de guardias.
 
 import sys
 import os
-# Añadir la raíz del proyecto al path para importaciones absolutas
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from modules.guardias.models import ProfesorDisponible
@@ -31,17 +30,13 @@ def determinar_profesores_disponibles(profesores, presencias, ausencias, hora, d
     """
     disponibles = []
     for profesor in profesores:
-        # Verificar si no está ausente en esta hora
         ausente_hora = any(a.profesor_id == profesor.id and a.hora == hora for a in ausencias)
         if ausente_hora:
             continue
 
-        # Verificar presencia
         presencias_profesor = sorted([p for p in presencias if p.profesor_id == profesor.id], key=lambda p: p.timestamp)
         if presencias_profesor and presencias_profesor[-1].tipo == 'entrada':
-            # Calcular carga lectiva (número de horas semanales)
             carga_lectiva = calcular_carga_lectiva(profesor.id, db_manager)
-            # Añadir atributo dinámicamente
             profesor.carga_lectiva = carga_lectiva
             profesor_disp = ProfesorDisponible(profesor, hora)
             disponibles.append(profesor_disp)
@@ -59,8 +54,6 @@ def calcular_carga_lectiva(profesor_id, db_manager):
     Returns:
         int: Número de horas lectivas semanales
     """
-    # Obtener todos los horarios del profesor (asumiendo que db_manager tiene un método para esto)
-    # Como no hay método específico, usar get_horarios_by_dia para cada día
     dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes']
     carga = 0
     for dia in dias:
@@ -83,7 +76,6 @@ def calcular_ranking_profesores(profesores_disponibles):
     Returns:
         list: Lista ordenada de ProfesorDisponible (mejor prioridad primero)
     """
-    # Actualizar puntuación con los nuevos criterios
     for prof_disp in profesores_disponibles:
         prof_disp.puntuacion_prioridad = (
             prof_disp.profesor.guardias_acumuladas,
@@ -109,5 +101,5 @@ def asignar_guardias(guardias, ranking_profesores):
             if profesor_disp.puede_hacer_guardia(guardia.hora):
                 guardia.asignar_profesor(profesor_disp.profesor.id)
                 profesor_disp.incrementar_contadores_guardia()
-                break  # Asignar al primero disponible según ranking
+                break
     return guardias

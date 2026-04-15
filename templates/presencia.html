@@ -1,74 +1,123 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Presencia</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <style>
+        body {
+            background: linear-gradient(180deg, #f5f7fb 0%, #eef3f8 100%);
+            min-height: 100vh;
+        }
 
-{% block title %}Presencia{% endblock %}
+        .app-shell {
+            max-width: 1120px;
+        }
 
-{% block content %}
-<section class="page-hero p-4 p-lg-5 mb-4">
-    <div class="row g-4 align-items-center">
-        <div class="col-lg-8">
-            <h1 class="display-6 fw-semibold mb-3">Control de Presencia</h1>
-            <p class="text-secondary mb-0">Registro manual del profesorado y consulta del estado actual en una tabla simple.</p>
-        </div>
-        <div class="col-lg-4">
-            <div class="card content-card bg-body-tertiary">
-                <div class="card-body p-4">
-                    <form action="/presencia/registrar" method="post" class="d-grid">
-                        <button class="btn btn-primary btn-lg" type="submit">Registrar Presencia</button>
-                    </form>
+        .page-hero {
+            background: #ffffff;
+            border: 1px solid #dfe7f1;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(31, 41, 55, 0.08);
+        }
+
+        .stat-card,
+        .content-card {
+            border: 0;
+            border-radius: 1rem;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+        <div class="container app-shell">
+            <a class="navbar-brand fw-semibold" href="{{ url_for('index') }}">Proyecto Guardias</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Mostrar navegación">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <div class="navbar-nav ms-auto gap-lg-2">
+                    <a class="nav-link" href="{{ url_for('index') }}">Inicio</a>
+                    <a class="nav-link active fw-semibold" href="{{ url_for('vista_presencia') }}">Presencia</a>
+                    <a class="nav-link" href="{{ url_for('vista_guardias') }}">Guardias</a>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </nav>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-        <section class="mb-4">
-            {% for category, message in messages %}
-                <div class="alert {% if category == 'success' %}alert-success{% else %}alert-danger{% endif %} mb-3" role="alert">
-                    {{ message }}
+    <main class="container app-shell py-4 py-lg-5">
+        <section class="page-hero p-4 p-lg-5 mb-4">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-8">
+                    <h1 class="display-6 fw-semibold mb-3">Control de Presencia</h1>
+                    <p class="text-secondary mb-0">Registro manual del profesorado y consulta del estado actual en una tabla simple.</p>
                 </div>
-            {% endfor %}
+                <div class="col-lg-4">
+                    <div class="card content-card bg-body-tertiary">
+                        <div class="card-body p-4">
+                            <form action="{{ url_for('registrar') }}" method="post" class="d-grid">
+                                <button class="btn btn-primary btn-lg" type="submit">Registrar Presencia</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
-    {% endif %}
-{% endwith %}
 
-<section class="card stat-card">
-    <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-            <h2 class="h4 mb-0">Estado Actual del Profesorado</h2>
-            <span class="badge text-bg-light border">{{ estado|length }} registros</span>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Nombre</th>
-                        <th>Estado</th>
-                        <th>Última Acción</th>
-                        <th>Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for profesor_id, info in estado.items() %}
-                    <tr>
-                        <td class="fw-medium">{{ info.nombre }}</td>
-                        <td>
-                            <span class="badge {% if info.presente %}text-bg-success{% else %}text-bg-danger{% endif %}">
-                                {% if info.presente %}Presente{% else %}Ausente{% endif %}
-                            </span>
-                        </td>
-                        <td>{{ info.ultima_accion or 'N/A' }}</td>
-                        <td>{{ info.timestamp or 'N/A' }}</td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="4" class="text-center text-secondary py-4">No hay registros de presencia para mostrar.</td>
-                    </tr>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="mb-4">
+                    {% for category, message in messages %}
+                        <div class="alert {% if category == 'success' %}alert-success{% else %}alert-danger{% endif %} mb-3" role="alert">
+                            {{ message }}
+                        </div>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-</section>
-{% endblock %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <section class="card stat-card">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h2 class="h4 mb-0">Estado Actual del Profesorado</h2>
+                    <span class="badge text-bg-light border">{{ estado|length }} registros</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Estado</th>
+                                <th>Última Acción</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for profesor_id, info in estado.items() %}
+                            <tr>
+                                <td class="fw-medium">{{ info.nombre }}</td>
+                                <td>
+                                    <span class="badge {% if info.presente %}text-bg-success{% else %}text-bg-danger{% endif %}">
+                                        {% if info.presente %}Presente{% else %}Ausente{% endif %}
+                                    </span>
+                                </td>
+                                <td>{{ info.ultima_accion or 'N/A' }}</td>
+                                <td>{{ info.timestamp or 'N/A' }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-secondary py-4">No hay registros de presencia para mostrar.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</body>
+</html>

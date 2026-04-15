@@ -1,54 +1,74 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Presencia</title>
-    <style>
-        .presente { color: green; }
-        .ausente { color: red; }
-        .flash { padding: 10px; margin: 10px 0; border-radius: 5px; }
-        .success { background-color: #d4edda; color: #155724; }
-        .error { background-color: #f8d7da; color: #721c24; }
-    </style>
-</head>
-<body>
-    <h1>Control de Presencia</h1>
+{% extends "base.html" %}
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
+{% block title %}Presencia{% endblock %}
+
+{% block content %}
+<section class="page-hero p-4 p-lg-5 mb-4">
+    <div class="row g-4 align-items-center">
+        <div class="col-lg-8">
+            <h1 class="display-6 fw-semibold mb-3">Control de Presencia</h1>
+            <p class="text-secondary mb-0">Registro manual del profesorado y consulta del estado actual en una tabla simple.</p>
+        </div>
+        <div class="col-lg-4">
+            <div class="card content-card bg-body-tertiary">
+                <div class="card-body p-4">
+                    <form action="/presencia/registrar" method="post" class="d-grid">
+                        <button class="btn btn-primary btn-lg" type="submit">Registrar Presencia</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        <section class="mb-4">
             {% for category, message in messages %}
-                <div class="flash {{ category }}">{{ message }}</div>
+                <div class="alert {% if category == 'success' %}alert-success{% else %}alert-danger{% endif %} mb-3" role="alert">
+                    {{ message }}
+                </div>
             {% endfor %}
-        {% endif %}
-    {% endwith %}
+        </section>
+    {% endif %}
+{% endwith %}
 
-    <form action="/presencia/registrar" method="post">
-        <button type="submit">Registrar Presencia</button>
-    </form>
-
-    <h2>Estado Actual del Profesorado</h2>
-    <table border="1">
-        <thead>
-            <tr>
-                <th>Nombre</th>
-                <th>Estado</th>
-                <th>Última Acción</th>
-                <th>Timestamp</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for profesor_id, info in estado.items() %}
-            <tr>
-                <td>{{ info.nombre }}</td>
-                <td class="{% if info.presente %}presente{% else %}ausente{% endif %}">
-                    {% if info.presente %}Presente{% else %}Ausente{% endif %}
-                </td>
-                <td>{{ info.ultima_accion or 'N/A' }}</td>
-                <td>{{ info.timestamp or 'N/A' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <a href="/">Volver</a>
-</body>
-</html>
+<section class="card stat-card">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h2 class="h4 mb-0">Estado Actual del Profesorado</h2>
+            <span class="badge text-bg-light border">{{ estado|length }} registros</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th>Última Acción</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for profesor_id, info in estado.items() %}
+                    <tr>
+                        <td class="fw-medium">{{ info.nombre }}</td>
+                        <td>
+                            <span class="badge {% if info.presente %}text-bg-success{% else %}text-bg-danger{% endif %}">
+                                {% if info.presente %}Presente{% else %}Ausente{% endif %}
+                            </span>
+                        </td>
+                        <td>{{ info.ultima_accion or 'N/A' }}</td>
+                        <td>{{ info.timestamp or 'N/A' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center text-secondary py-4">No hay registros de presencia para mostrar.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}

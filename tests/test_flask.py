@@ -28,6 +28,17 @@ def test_ruta_guardias_devuelve_200(cliente):
     assert respuesta.status_code == 200
 
 
+def test_ruta_guardias_muestra_datos_de_ejemplo(cliente):
+    """La ruta /guardias muestra ranking y aulas con datos de ejemplo."""
+    respuesta = cliente.get("/guardias")
+
+    assert respuesta.status_code == 200
+    assert b"Guardias y Sustituciones" in respuesta.data
+    assert b"Ana Garcia" in respuesta.data
+    assert b"A101" in respuesta.data
+    assert b"Profesores ordenados por prioridad" in respuesta.data
+
+
 def test_ruta_presencia_pasa_estado_al_template(monkeypatch, cliente):
     """La ruta /presencia pasa los datos de estado simulados correctamente."""
     estado_simulado = {

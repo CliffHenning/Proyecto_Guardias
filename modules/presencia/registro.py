@@ -42,7 +42,7 @@ def obtener_estado_actual(db_path="ies.db"):
     for profesor in profesores:
         presencias_profesor = sorted([p for p in presencias_hoy if p.profesor_id == profesor.id],
                                    key=lambda p: p.timestamp)
-        presente = presencias_profesor and presencias_profesor[-1].tipo == 'entrada'
+        presente = bool(presencias_profesor) and presencias_profesor[-1].tipo == 'entrada'
         estado[profesor.id] = {
             'nombre': profesor.nombre,
             'presente': presente,

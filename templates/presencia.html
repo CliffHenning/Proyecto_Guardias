@@ -78,9 +78,11 @@
                     <div class="col-md-6 col-xl-4">
                         <form action="{{ url_for('registrar') }}" method="post" class="h-100">
                             <input type="hidden" name="profesor_id" value="{{ profesor_id }}">
-                            <button class="btn btn-outline-dark w-100 h-100 text-start p-3" type="submit">
+                            <button class="btn {% if info.presente %}btn-success{% else %}btn-outline-dark{% endif %} w-100 h-100 text-start p-3" type="submit">
                                 <span class="d-block fw-semibold mb-1">{{ info.nombre }}</span>
-                                <span class="small text-secondary">Registrar entrada o salida</span>
+                                <span class="small {% if info.presente %}text-white{% else %}text-secondary{% endif %}">
+                                    {% if info.presente %}Presente{% else %}Ausente{% endif %}
+                                </span>
                             </button>
                         </form>
                     </div>

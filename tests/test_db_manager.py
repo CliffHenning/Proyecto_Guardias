@@ -2,6 +2,7 @@ import pytest
 import sqlite3
 import sys
 import os
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from modules.db.db_manager import DBManager
@@ -115,13 +116,15 @@ def db_manager():
             return [Presencia(*row) for row in rows]
 
         def insert_presencia(self, presencia):
+            timestamp = presencia.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO presencia (profesor_id, tipo)
-                VALUES (?, ?)
-            """, (presencia.profesor_id, presencia.tipo))
+                INSERT INTO presencia (profesor_id, timestamp, tipo)
+                VALUES (?, ?, ?)
+            """, (presencia.profesor_id, timestamp, presencia.tipo))
             presencia.id = cursor.lastrowid
+            presencia.timestamp = timestamp
             conn.commit()
             return presencia
 
@@ -262,6 +265,21 @@ def test_insert_and_get_presencia_hoy(db_manager):
     last_presencia = db_manager.get_presencia_hoy(prof_inserted.id)
     assert last_presencia.tipo == "entrada"
     assert last_presencia.profesor_id == prof_inserted.id
+
+
+def test_insert_presencia_guarda_timestamp_local(db_manager):
+    """La presencia debe guardarse con la hora local actual y no con UTC de SQLite."""
+    profesor = Profesor(nombre="Test Timestamp", rfid="171717171", activo=1)
+    prof_inserted = db_manager.insert_profesor(profesor)
+
+    antes = datetime.now().replace(microsecond=0)
+    presencia = Presencia(profesor_id=prof_inserted.id, tipo="entrada")
+    inserted = db_manager.insert_presencia(presencia)
+    despues = datetime.now().replace(microsecond=0)
+
+    timestamp_guardado = datetime.strptime(inserted.timestamp, "%Y-%m-%d %H:%M:%S")
+
+    assert antes <= timestamp_guardado <= despues
 
 
 def test_get_presencias_hoy(db_manager):

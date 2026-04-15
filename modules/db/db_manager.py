@@ -1,6 +1,7 @@
 import sqlite3
 import sys
 import os
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from modules.db.models import Profesor, Horario, Presencia, Ausencia, Guardia
@@ -122,13 +123,15 @@ class DBManager:
 
     def insert_presencia(self, presencia):
         """Registra entrada o salida."""
+        timestamp = presencia.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO presencia (profesor_id, tipo)
-            VALUES (?, ?)
-        """, (presencia.profesor_id, presencia.tipo))
+            INSERT INTO presencia (profesor_id, timestamp, tipo)
+            VALUES (?, ?, ?)
+        """, (presencia.profesor_id, timestamp, presencia.tipo))
         presencia.id = cursor.lastrowid
+        presencia.timestamp = timestamp
         conn.commit()
         conn.close()
         return presencia

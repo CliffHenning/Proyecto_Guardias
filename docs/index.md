@@ -18,40 +18,6 @@ El sistema permite:
 - Presencia: identificacion del profesorado y registro de entradas o salidas.
 - Base de datos: acceso a SQLite, modelos y esquema.
 
-## Estructura general
-
-```text
-proyecto_guardias/
-|- app.py
-|- config.py
-|- mkdocs.yml
-|- modules/
-|  |- db/
-|  |- guardias/
-|  \- presencia/
-|- templates/
-|- static/
-|- tests/
-\- docs/
-```
-
-## Puesta en marcha rapida
-
-```bash
-pip install mkdocs mkdocs-material
-mkdocs serve
-```
-
-La documentacion local queda disponible en http://127.0.0.1:8000.
-
-Para generar la version publica del sitio:
-
-```bash
-mkdocs build
-```
-
-El resultado se genera en la carpeta `site/`.
-
 ## Contenido de esta documentacion
 
 En las siguientes secciones se describe la arquitectura del sistema, la base de datos, el modulo Flask, la logica de guardias, el modulo de presencia, las pruebas unitarias y el despliegue en Raspberry Pi.

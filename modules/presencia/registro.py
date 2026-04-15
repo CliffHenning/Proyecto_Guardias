@@ -16,9 +16,9 @@ def identificar_profesor():
     else:
         raise ValueError(f"Método de presencia desconocido: {metodo}")
 
-def registrar_presencia(profesor_id):
+def registrar_presencia(profesor_id, db_path="ies.db"):
     """Registra entrada o salida del profesor."""
-    db_manager = DBManager()
+    db_manager = DBManager(db_path)
 
     ultima_presencia = db_manager.get_presencia_hoy(profesor_id)
 
@@ -32,9 +32,9 @@ def registrar_presencia(profesor_id):
 
     return tipo
 
-def obtener_estado_actual():
+def obtener_estado_actual(db_path="ies.db"):
     """Obtiene el estado actual de todos los profesores (presente/ausente)."""
-    db_manager = DBManager()
+    db_manager = DBManager(db_path)
     profesores = db_manager.get_profesores()
     presencias_hoy = db_manager.get_presencias_hoy()
 

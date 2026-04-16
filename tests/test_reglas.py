@@ -2,9 +2,19 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from config import describir_hora, describir_horas
 from modules.db.models import Profesor
 from modules.guardias.models import ProfesorDisponible
 from modules.guardias.reglas import calcular_ranking_profesores
+
+
+def test_describir_hora_devuelve_tramo_real_del_centro():
+    assert describir_hora(1) == "1 (8:45-9:45)"
+    assert describir_hora(11) == "11 (19:20-20:10)"
+
+
+def test_describir_horas_agrupa_varias_horas_ordenadas():
+    assert describir_horas([4, 1, 3]) == "1 (8:45-9:45), 3 (10:25-11:15), 4 (11:45-12:35)"
 
 
 def test_profesor_disponible_activo_y_hora_disponible():

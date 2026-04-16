@@ -30,6 +30,11 @@ def registrar_presencia(profesor_id, db_path="ies.db"):
     presencia = Presencia(profesor_id=profesor_id, tipo=tipo)
     db_manager.insert_presencia(presencia)
 
+    if tipo == 'entrada':
+        ausencias_activas = db_manager.get_ausencias_profesor_hoy(profesor_id)
+        if ausencias_activas:
+            db_manager.delete_ausencias_profesor_hoy(profesor_id)
+
     return tipo
 
 def obtener_estado_actual(db_path="ies.db"):

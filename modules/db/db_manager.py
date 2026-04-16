@@ -149,6 +149,20 @@ class DBManager:
         conn.close()
         return [Ausencia(*row) for row in rows]
 
+    def get_ausencias_profesor_hoy(self, profesor_id, fecha=None):
+        """Obtiene las ausencias activas de un profesor para el día indicado."""
+        from datetime import datetime
+        fecha = fecha or datetime.now().strftime("%Y-%m-%d")
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ausencias WHERE profesor_id = ? AND dia = ? ORDER BY hora",
+            (profesor_id, fecha),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        return [Ausencia(*row) for row in rows]
+
     def insert_ausencia(self, ausencia):
         """Inserta una nueva ausencia."""
         conn = self.get_connection()
@@ -162,6 +176,18 @@ class DBManager:
         conn.close()
         return ausencia
 
+    def delete_ausencias_profesor_hoy(self, profesor_id, fecha=None):
+        """Elimina las ausencias activas de un profesor para el día indicado."""
+        from datetime import datetime
+        fecha = fecha or datetime.now().strftime("%Y-%m-%d")
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM ausencias WHERE profesor_id = ? AND dia = ?", (profesor_id, fecha))
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return deleted
+
     # ==================== GUARDIAS ====================
 
     def get_guardias_by_dia(self, dia):
@@ -172,6 +198,23 @@ class DBManager:
         rows = cursor.fetchall()
         conn.close()
         return [Guardia(*row) for row in rows]
+
+    def get_guardia_cubierta(self, dia, hora, aula):
+        """Obtiene una guardia registrada para un tramo concreto."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT * FROM guardias
+            WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (dia, hora, aula),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return Guardia(*row) if row else None
 
     def insert_guardia(self, guardia):
         """Inserta una nueva guardia."""
@@ -194,21 +237,14 @@ class DBManager:
         conn.commit()
         conn.close()
 
-    def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado):
+    def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado=None):
         """Indica si una guardia ya fue registrada previamente."""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id FROM guardias
-            WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
-            LIMIT 1
-            """,
-            (dia, hora, aula, profesor_asignado),
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return row is not None
+        guardia = self.get_guardia_cubierta(dia, hora, aula)
+        if guardia is None:
+            return False
+        if profesor_asignado is None:
+            return True
+        return guardia.profesor_asignado == profesor_asignado
 
     def registrar_guardia_realizada(self, dia, hora, aula, profesor_asignado):
         """Registra una guardia realizada y actualiza los contadores del profesor."""
@@ -217,10 +253,10 @@ class DBManager:
         cursor.execute(
             """
             SELECT id FROM guardias
-            WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
+            WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
             LIMIT 1
             """,
-            (dia, hora, aula, profesor_asignado),
+            (dia, hora, aula),
         )
         if cursor.fetchone():
             conn.close()

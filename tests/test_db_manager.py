@@ -137,6 +137,15 @@ def db_manager():
             rows = cursor.fetchall()
             return [Ausencia(*row) for row in rows]
 
+        def get_ausencias_profesor_hoy(self, profesor_id, fecha=None):
+            from datetime import datetime
+            fecha = fecha or datetime.now().strftime("%Y-%m-%d")
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM ausencias WHERE profesor_id = ? AND dia = ? ORDER BY hora", (profesor_id, fecha))
+            rows = cursor.fetchall()
+            return [Ausencia(*row) for row in rows]
+
         def insert_ausencia(self, ausencia):
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -148,12 +157,37 @@ def db_manager():
             conn.commit()
             return ausencia
 
+        def delete_ausencias_profesor_hoy(self, profesor_id, fecha=None):
+            from datetime import datetime
+            fecha = fecha or datetime.now().strftime("%Y-%m-%d")
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM ausencias WHERE profesor_id = ? AND dia = ?", (profesor_id, fecha))
+            deleted = cursor.rowcount
+            conn.commit()
+            return deleted
+
         def get_guardias_by_dia(self, dia):
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM guardias WHERE dia = ?", (dia,))
             rows = cursor.fetchall()
             return [Guardia(*row) for row in rows]
+
+        def get_guardia_cubierta(self, dia, hora, aula):
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT * FROM guardias
+                WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (dia, hora, aula),
+            )
+            row = cursor.fetchone()
+            return Guardia(*row) if row else None
 
         def insert_guardia(self, guardia):
             conn = self.get_connection()
@@ -172,18 +206,13 @@ def db_manager():
             cursor.execute("UPDATE guardias SET cubierta = ? WHERE id = ?", (cubierta, guardia_id))
             conn.commit()
 
-        def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id FROM guardias
-                WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
-                LIMIT 1
-                """,
-                (dia, hora, aula, profesor_asignado),
-            )
-            return cursor.fetchone() is not None
+        def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado=None):
+            guardia = self.get_guardia_cubierta(dia, hora, aula)
+            if guardia is None:
+                return False
+            if profesor_asignado is None:
+                return True
+            return guardia.profesor_asignado == profesor_asignado
 
         def registrar_guardia_realizada(self, dia, hora, aula, profesor_asignado):
             conn = self.get_connection()
@@ -191,10 +220,10 @@ def db_manager():
             cursor.execute(
                 """
                 SELECT id FROM guardias
-                WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
+                WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
                 LIMIT 1
                 """,
-                (dia, hora, aula, profesor_asignado),
+                (dia, hora, aula),
             )
             if cursor.fetchone():
                 return False
@@ -316,6 +345,36 @@ def test_registrar_guardia_realizada_no_duplica_contadores(db_manager):
     assert actualizado.guardias_acumuladas == 1
     assert actualizado.guardias_semana == 1
     assert len(guardias) == 1
+
+
+def test_delete_ausencias_profesor_hoy_elimina_ausencias_activas(db_manager):
+    """La eliminación de ausencias activas del día debe afectar solo al profesor indicado."""
+    profesor_1 = db_manager.insert_profesor(Profesor(nombre="Profesor Uno", rfid="A1", activo=1))
+    profesor_2 = db_manager.insert_profesor(Profesor(nombre="Profesor Dos", rfid="A2", activo=1))
+    hoy = datetime.now().strftime("%Y-%m-%d")
+
+    db_manager.insert_ausencia(Ausencia(profesor_id=profesor_1.id, dia=hoy, hora=1, motivo="Ausencia 1"))
+    db_manager.insert_ausencia(Ausencia(profesor_id=profesor_1.id, dia=hoy, hora=2, motivo="Ausencia 2"))
+    db_manager.insert_ausencia(Ausencia(profesor_id=profesor_2.id, dia=hoy, hora=1, motivo="Ausencia 3"))
+
+    deleted = db_manager.delete_ausencias_profesor_hoy(profesor_1.id, hoy)
+    ausencias_prof_1 = db_manager.get_ausencias_profesor_hoy(profesor_1.id, hoy)
+    ausencias_prof_2 = db_manager.get_ausencias_profesor_hoy(profesor_2.id, hoy)
+
+    assert deleted == 2
+    assert ausencias_prof_1 == []
+    assert len(ausencias_prof_2) == 1
+
+
+def test_get_guardia_cubierta_devuelve_la_guardia_registrada(db_manager):
+    """Debe poder recuperarse la guardia cubierta de un tramo concreto."""
+    profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Cobertura", rfid="RC1", activo=1))
+    db_manager.registrar_guardia_realizada("Jueves", 1, "A101", profesor.id)
+
+    guardia = db_manager.get_guardia_cubierta("Jueves", 1, "A101")
+
+    assert guardia is not None
+    assert guardia.profesor_asignado == profesor.id
 
 
 def test_insert_and_get_horarios_by_dia(db_manager):

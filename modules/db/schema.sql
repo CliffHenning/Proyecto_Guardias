@@ -20,7 +20,7 @@ CREATE TABLE horarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profesor_id INTEGER,
     dia TEXT,              -- ej: 'Lunes'
-    hora INTEGER,          -- ej: 1,2,3...
+    hora INTEGER,          -- ej: 1..11, asociado al tramo real via config.describir_hora
     aula TEXT,
     asignatura TEXT,
     FOREIGN KEY (profesor_id) REFERENCES profesores(id)

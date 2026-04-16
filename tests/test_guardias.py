@@ -9,7 +9,7 @@ from modules.db.models import Profesor, Horario, Presencia, Ausencia
 from modules.db.db_manager import DBManager
 from modules.guardias.models import Guardia, ProfesorDisponible
 from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores, asignar_guardias
-from modules.guardias.motor import MotorGuardias
+from modules.guardias.motor import MotorGuardias, obtener_dia_semana_es
 
 
 class StubDbManager:
@@ -137,7 +137,7 @@ def test_asignar_guardias_asigna_mejor_profesor_segun_ranking():
     assert prof2.guardias_acumuladas == 0
 
 
-def test_motor_guardias_integration_asigna_guardia_a_profesor_presente(monkeypatch):
+def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_automatica(monkeypatch):
     motor = MotorGuardias(db_path=":memory:")
 
     profesores = [
@@ -168,7 +168,7 @@ def test_motor_guardias_integration_asigna_guardia_a_profesor_presente(monkeypat
     assert len(resultado["guardias"]) == 1
     guardia_asignada = resultado["guardias"][0]
     assert guardia_asignada.aula == "A101"
-    assert guardia_asignada.profesor_asignado == 1
+    assert guardia_asignada.profesor_asignado is None
 
     ranking_ids = [item.profesor.id for item in resultado["ranking_profesores"]]
     assert ranking_ids == [1]
@@ -185,7 +185,7 @@ def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
         profesor_presente = db_manager.insert_profesor(Profesor(nombre="Profesor Presente", rfid="GA2", activo=1))
 
         dia_prueba = "2026-04-15"
-        dia_semana = datetime.strptime(dia_prueba, "%Y-%m-%d").strftime("%A").capitalize()
+        dia_semana = obtener_dia_semana_es(datetime.strptime(dia_prueba, "%Y-%m-%d"))
 
         db_manager.insert_presencia(Presencia(profesor_id=profesor_presente.id, timestamp=f"{dia_prueba} 08:00:00", tipo="entrada"))
         db_manager.insert_horario(Horario(profesor_id=profesor_ausente.id, dia=dia_semana, hora=2, aula="A204", asignatura="Historia"))
@@ -202,8 +202,47 @@ def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
     assert guardia.aula == "A204"
     assert guardia.asignatura == "Historia"
     assert guardia.hora == 2
+    assert guardia.profesor_asignado is None
     assert len(resultado["ranking_profesores"]) == 1
     assert resultado["ranking_profesores"][0].profesor.id == profesor_presente.id
+
+
+def test_motor_convierte_ausencia_en_guardia_aunque_falte_horario():
+    """Para depuración, una ausencia sin horario detallado debe seguir apareciendo como guardia pendiente."""
+    motor = MotorGuardias(db_path=":memory:")
+
+    profesores = [Profesor(id=1, nombre="Profesor Presente", activo=1, guardias_acumuladas=0, guardias_semana=0)]
+    presencias = [Presencia(profesor_id=1, timestamp="2026-04-16 08:00:00", tipo="entrada")]
+    ausencias = [Ausencia(profesor_id=99, dia="2026-04-16", hora=2, motivo="Sin horario cargado")]
+
+    class StubManager:
+        def get_profesores(self):
+            return profesores
+
+        def get_presencias_hoy(self, dia=None):
+            return presencias
+
+        def get_ausencias_hoy(self, dia=None):
+            return ausencias
+
+        def get_horarios_by_dia(self, dia):
+            return []
+
+    motor.db_manager = StubManager()
+
+    resultado = motor.calcular_guardias(dia="2026-04-16")
+
+    assert len(resultado["guardias"]) == 1
+    guardia = resultado["guardias"][0]
+    assert guardia.aula == "Aula por determinar"
+    assert guardia.asignatura == "Sin asignatura"
+    assert guardia.hora == 2
+
+
+def test_obtener_dia_semana_es_no_depende_del_locale():
+    fecha = datetime.strptime("2026-04-16", "%Y-%m-%d")
+
+    assert obtener_dia_semana_es(fecha) == "Jueves"
 
 
 # --- Pruebas de modelos de dominio (1.1.5.4) ---

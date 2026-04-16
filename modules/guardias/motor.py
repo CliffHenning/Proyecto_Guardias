@@ -3,9 +3,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from datetime import datetime
-import locale
 from modules.db.db_manager import DBManager
-from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores, asignar_guardias
+from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores
 from modules.guardias.models import Guardia
 
 """
@@ -14,13 +13,20 @@ Coordina el proceso de cálculo de guardias, obteniendo datos a través de db_ma
 y aplicando reglas definidas en reglas.py.
 """
 
-try:
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-except locale.Error:
-    try:
-        locale.setlocale(locale.LC_TIME, 'Spanish_Spain')
-    except locale.Error:
-        pass
+DIAS_SEMANA_ES = [
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+    "Domingo",
+]
+
+
+def obtener_dia_semana_es(fecha):
+    """Devuelve el nombre del día en español sin depender del locale del sistema."""
+    return DIAS_SEMANA_ES[fecha.weekday()]
 
 
 class MotorGuardias:
@@ -54,18 +60,17 @@ class MotorGuardias:
         guardias = []
         for ausencia in ausencias:
             fecha = datetime.strptime(ausencia.dia, "%Y-%m-%d")
-            dia_semana = fecha.strftime("%A").capitalize()
+            dia_semana = obtener_dia_semana_es(fecha)
             horarios_profesor = self.db_manager.get_horarios_by_dia(dia_semana)
             horario_ausente = next((h for h in horarios_profesor if h.profesor_id == ausencia.profesor_id and h.hora == ausencia.hora), None)
-            if horario_ausente:
-                guardia = Guardia(
-                    dia_semana,
-                    ausencia.hora,
-                    horario_ausente.aula,
-                    ausencia.profesor_id,
-                    asignatura=horario_ausente.asignatura,
-                )
-                guardias.append(guardia)
+            guardia = Guardia(
+                dia_semana,
+                ausencia.hora,
+                horario_ausente.aula if horario_ausente else "Aula por determinar",
+                ausencia.profesor_id,
+                asignatura=horario_ausente.asignatura if horario_ausente else "Sin asignatura",
+            )
+            guardias.append(guardia)
 
         horas_con_guardias = set(g.hora for g in guardias)
         profesores_disponibles_global = set()
@@ -76,9 +81,7 @@ class MotorGuardias:
 
         ranking_profesores = calcular_ranking_profesores(list(profesores_disponibles_global))
 
-        guardias_asignadas = asignar_guardias(guardias, ranking_profesores)
-
         return {
             'ranking_profesores': ranking_profesores,
-            'guardias': guardias_asignadas
+            'guardias': guardias
         }

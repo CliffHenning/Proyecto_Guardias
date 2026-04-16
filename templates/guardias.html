@@ -67,11 +67,17 @@
             <div class="row g-4 align-items-center">
                 <div class="col-lg-8">
                     <h1 class="display-6 fw-semibold mb-3">Guardias y Sustituciones</h1>
-                    <p class="text-secondary mb-2">Fecha de ejemplo: {{ datos.fecha }}</p>
-                    <p class="mb-0 text-secondary">Esta vista usa datos de ejemplo del proyecto mientras se conecta el motor real de calculo.</p>
+                    <p class="text-secondary mb-2">Fecha consultada: {{ datos.fecha }}</p>
+                    <p class="mb-0 text-secondary">La vista muestra las guardias calculadas con las ausencias y horarios disponibles para esa fecha.</p>
                 </div>
             </div>
         </section>
+
+        {% if not datos.guardias %}
+        <section class="alert alert-warning mb-4" role="alert">
+            No hay guardias calculadas para esta fecha. Revisa que existan ausencias para hoy y horarios cargados para el mismo día de la semana.
+        </section>
+        {% endif %}
 
         <section class="row g-4 mb-4">
             <div class="col-md-4">
@@ -113,7 +119,7 @@
                                 <th>Guardias acumuladas</th>
                                 <th>Guardias semana</th>
                                 <th>Carga lectiva</th>
-                                <th>Hora disponible</th>
+                                <th>Horas disponibles</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -124,7 +130,7 @@
                                 <td>{{ profesor.guardias_acumuladas }}</td>
                                 <td>{{ profesor.guardias_semana }}</td>
                                 <td>{{ profesor.carga_lectiva }}</td>
-                                <td>{{ profesor.hora_disponible }}</td>
+                                <td>{{ profesor.horas_disponibles_texto }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -145,7 +151,7 @@
                                 <th>Aula</th>
                                 <th>Asignatura</th>
                                 <th>Profesor ausente</th>
-                                <th>Profesor asignado</th>
+                                <th>Profesor que cubre</th>
                                 <th>Estado</th>
                                 <th>Accion</th>
                             </tr>
@@ -154,25 +160,31 @@
                             {% for guardia in datos.guardias %}
                             <tr>
                                 <td>{{ guardia.dia }}</td>
-                                <td>{{ guardia.hora }}</td>
+                                <td>{{ guardia.hora_texto }}</td>
                                 <td>{{ guardia.aula }}</td>
                                 <td>{{ guardia.asignatura }}</td>
                                 <td>{{ guardia.profesor_ausente }}</td>
                                 <td>{{ guardia.profesor_asignado }}</td>
                                 <td>
-                                    <span class="badge {{ 'text-bg-primary' if guardia.registrada else 'text-bg-success' if guardia.estado == 'Cubierta' else 'text-bg-warning' }}">
+                                    <span class="badge {{ 'text-bg-primary' if guardia.registrada else 'text-bg-warning' }}">
                                         {{ guardia.estado }}
                                     </span>
                                 </td>
                                 <td>
-                                    {% if guardia.profesor_asignado_id and not guardia.registrada %}
-                                    <form method="post" action="{{ url_for('registrar_guardia') }}" class="d-inline">
+                                    {% if not guardia.registrada and guardia.candidatos %}
+                                    <form method="post" action="{{ url_for('registrar_guardia') }}" class="d-flex gap-2 align-items-center">
                                         <input type="hidden" name="dia" value="{{ guardia.dia }}">
                                         <input type="hidden" name="hora" value="{{ guardia.hora }}">
                                         <input type="hidden" name="aula" value="{{ guardia.aula }}">
-                                        <input type="hidden" name="profesor_asignado" value="{{ guardia.profesor_asignado_id }}">
+                                        <select name="profesor_asignado" class="form-select form-select-sm" aria-label="Seleccionar profesor para la guardia">
+                                            {% for candidato in guardia.candidatos %}
+                                            <option value="{{ candidato.id }}">{{ candidato.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
                                         <button type="submit" class="btn btn-sm btn-outline-primary">Registrar guardia</button>
                                     </form>
+                                    {% elif not guardia.registrada %}
+                                    <span class="text-secondary small">Sin profesores disponibles</span>
                                     {% else %}
                                     <span class="text-secondary small">Sin accion disponible</span>
                                     {% endif %}

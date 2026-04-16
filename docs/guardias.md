@@ -6,7 +6,7 @@ El módulo de guardias calcula cobertura de ausencias según reglas de prioridad
 
 1. Detectar profesores disponibles
 2. Aplicar ranking por criterios de prioridad
-3. Asignar guardias por hora y disponibilidad
+3. Mostrar las aulas a cubrir y permitir la selección manual del profesor que realizará la guardia
 
 ## Criterios del ranking
 
@@ -25,12 +25,36 @@ Cuando se detecta una ausencia con horario asociado, el sistema genera una guard
 3. Profesor ausente
 4. Hora que requiere cobertura
 
+La aplicación conserva internamente la hora como índice numérico para simplificar la lógica y la base de datos, pero en la interfaz la muestra con el tramo real del instituto. De lunes a viernes se usan estos once tramos:
+
+1. 1: 8:45-9:45
+2. 2: 9:35-10:25
+3. 3: 10:25-11:15
+4. 4: 11:45-12:35
+5. 5: 12:35-13:25
+6. 6: 13:25-14:15
+7. 7: 15:40-16:30
+8. 8: 16:30-17:20
+9. 9: 17:20-18:10
+10. 10: 18:10-19:00
+11. 11: 19:20-20:10
+
+La asociación entre el número de hora y su tramo real se centraliza en una función de utilidad, de forma que la base de datos puede seguir trabajando con `1..11` y la interfaz mostrar siempre el texto correcto.
+
+Para facilitar la depuración, si una ausencia no tiene horario detallado cargado para ese día y hora, el sistema sigue generando una guardia pendiente con valores de apoyo:
+
+1. Aula por determinar
+2. Sin asignatura
+
 ## Registro de guardia realizada
 
-Desde la vista de guardias se puede registrar una guardia ya asignada.
+Desde la vista de guardias se muestra cada aula pendiente junto con un desplegable de profesores disponibles para esa hora, ordenados por prioridad.
 
 Al pulsar el boton de registro:
 
-1. Se almacena la guardia en la tabla `guardias` como cubierta
-2. Se incrementan los contadores `guardias_acumuladas` y `guardias_semana` del profesor asignado
-3. La vista se recarga mostrando los nuevos valores del ranking y el estado de la guardia como registrada
+1. Se toma el profesor seleccionado manualmente en la interfaz
+2. Se almacena la guardia en la tabla `guardias` como cubierta
+3. Se incrementan los contadores `guardias_acumuladas` y `guardias_semana` del profesor elegido
+4. La vista se recarga mostrando el estado de la guardia como registrada
+
+Si un profesor tenía ausencias activas del día y posteriormente registra una entrada, el sistema elimina esas ausencias activas y hace que desaparezcan las guardias pendientes asociadas.

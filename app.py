@@ -3,6 +3,7 @@ import sqlite3
 
 from flask import Flask, render_template, redirect, request, url_for, flash
 
+from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
@@ -37,6 +38,49 @@ def _obtener_nombre_profesor(db_manager, profesor_id):
     return profesor.nombre if profesor else f"Profesor {profesor_id}"
 
 
+def _agrupar_candidatos_por_hora(ranking_profesores):
+    candidatos_por_hora = {}
+    for profesor_disp in ranking_profesores:
+        candidatos_por_hora.setdefault(profesor_disp.hora_disponible, []).append({
+            "id": profesor_disp.profesor.id,
+            "nombre": profesor_disp.profesor.nombre,
+            "guardias_semana": profesor_disp.profesor.guardias_semana,
+            "guardias_acumuladas": profesor_disp.profesor.guardias_acumuladas,
+            "carga_lectiva": getattr(profesor_disp.profesor, "carga_lectiva", 0),
+        })
+    return candidatos_por_hora
+
+
+def _agrupar_ranking_por_profesor(ranking_profesores):
+    ranking_agrupado = []
+    profesores_por_id = {}
+
+    for profesor_disp in ranking_profesores:
+        profesor_id = profesor_disp.profesor.id
+        profesor_existente = profesores_por_id.get(profesor_id)
+
+        if profesor_existente is None:
+            profesor_existente = {
+                "nombre": profesor_disp.profesor.nombre,
+                "guardias_semana": profesor_disp.profesor.guardias_semana,
+                "guardias_acumuladas": profesor_disp.profesor.guardias_acumuladas,
+                "carga_lectiva": getattr(profesor_disp.profesor, "carga_lectiva", 0),
+                "horas_disponibles": [],
+            }
+            profesores_por_id[profesor_id] = profesor_existente
+            ranking_agrupado.append(profesor_existente)
+
+        if profesor_disp.hora_disponible not in profesor_existente["horas_disponibles"]:
+            profesor_existente["horas_disponibles"].append(profesor_disp.hora_disponible)
+
+    for posicion, profesor in enumerate(ranking_agrupado, start=1):
+        profesor["posicion"] = posicion
+        profesor["horas_disponibles"].sort()
+        profesor["horas_disponibles_texto"] = describir_horas(profesor["horas_disponibles"])
+
+    return ranking_agrupado
+
+
 def obtener_datos_guardias(db_path=None, dia=None):
     fecha = dia or datetime.now().strftime("%Y-%m-%d")
     db_path = db_path or _obtener_db_path()
@@ -48,35 +92,27 @@ def obtener_datos_guardias(db_path=None, dia=None):
     except (sqlite3.Error, ValueError):
         return _datos_guardias_vacios(fecha)
 
-    ranking_profesores = []
-    for posicion, profesor_disp in enumerate(resultado["ranking_profesores"], start=1):
-        ranking_profesores.append({
-            "posicion": posicion,
-            "nombre": profesor_disp.profesor.nombre,
-            "hora_disponible": profesor_disp.hora_disponible,
-            "guardias_semana": profesor_disp.profesor.guardias_semana,
-            "guardias_acumuladas": profesor_disp.profesor.guardias_acumuladas,
-            "carga_lectiva": getattr(profesor_disp.profesor, "carga_lectiva", 0),
-        })
+    candidatos_por_hora = _agrupar_candidatos_por_hora(resultado["ranking_profesores"])
+
+    ranking_profesores = _agrupar_ranking_por_profesor(resultado["ranking_profesores"])
 
     guardias = []
     for guardia in resultado["guardias"]:
-        guardia_registrada = guardia.esta_cubierta() and db_manager.guardia_ya_registrada(
-            guardia.dia,
-            guardia.hora,
-            guardia.aula,
-            guardia.profesor_asignado,
-        )
+        guardia_cubierta = db_manager.get_guardia_cubierta(guardia.dia, guardia.hora, guardia.aula)
+        guardia_registrada = guardia_cubierta is not None
+        profesor_asignado_id = guardia_cubierta.profesor_asignado if guardia_cubierta else None
         guardias.append({
             "dia": guardia.dia,
             "hora": guardia.hora,
+            "hora_texto": describir_hora(guardia.hora),
             "aula": guardia.aula,
             "asignatura": guardia.asignatura or "Sin asignatura",
-            "profesor_asignado_id": guardia.profesor_asignado,
+            "profesor_asignado_id": profesor_asignado_id,
             "profesor_ausente": _obtener_nombre_profesor(db_manager, guardia.profesor_ausente_id),
-            "profesor_asignado": _obtener_nombre_profesor(db_manager, guardia.profesor_asignado),
-            "estado": "Registrada" if guardia_registrada else "Cubierta" if guardia.esta_cubierta() else "Pendiente",
+            "profesor_asignado": _obtener_nombre_profesor(db_manager, profesor_asignado_id),
+            "estado": "Registrada" if guardia_registrada else "Pendiente",
             "registrada": guardia_registrada,
+            "candidatos": candidatos_por_hora.get(guardia.hora, []),
         })
 
     return {
@@ -84,7 +120,7 @@ def obtener_datos_guardias(db_path=None, dia=None):
         "resumen": {
             "ausencias_detectadas": len(guardias),
             "guardias_necesarias": len(guardias),
-            "guardias_cubiertas": sum(1 for guardia in resultado["guardias"] if guardia.esta_cubierta()),
+            "guardias_cubiertas": sum(1 for guardia in guardias if guardia["registrada"]),
         },
         "ranking_profesores": ranking_profesores,
         "guardias": guardias,

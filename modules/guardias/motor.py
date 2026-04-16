@@ -48,8 +48,8 @@ class MotorGuardias:
             dia = datetime.now().strftime("%Y-%m-%d")
 
         profesores = self.db_manager.get_profesores()
-        presencias = self.db_manager.get_presencias_hoy()
-        ausencias = self.db_manager.get_ausencias_hoy()
+        presencias = self.db_manager.get_presencias_hoy(dia)
+        ausencias = self.db_manager.get_ausencias_hoy(dia)
 
         guardias = []
         for ausencia in ausencias:

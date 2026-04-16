@@ -1,8 +1,12 @@
 import sys
 import os
+import sqlite3
+import tempfile
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from modules.db.models import Profesor, Horario, Presencia, Ausencia
+from modules.db.db_manager import DBManager
 from modules.guardias.models import Guardia, ProfesorDisponible
 from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores, asignar_guardias
 from modules.guardias.motor import MotorGuardias
@@ -16,6 +20,20 @@ class StubDbManager:
 
     def get_horarios_by_dia(self, dia):
         return self.horarios_by_dia.get(dia, [])
+
+
+def crear_bd_temporal_guardias():
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+
+    conn = sqlite3.connect(db_path)
+    schema_path = os.path.join(os.path.dirname(__file__), '..', 'modules', 'db', 'schema.sql')
+    with open(schema_path, 'r', encoding='utf-8') as schema_file:
+        conn.executescript(schema_file.read())
+    conn.commit()
+    conn.close()
+
+    return db_path
 
 
 def test_determinar_profesores_disponibles_calcula_carga_lectiva_y_devuelve_disponible():
@@ -133,10 +151,10 @@ def test_motor_guardias_integration_asigna_guardia_a_profesor_presente(monkeypat
         def get_profesores(self):
             return profesores
 
-        def get_presencias_hoy(self):
+        def get_presencias_hoy(self, dia=None):
             return presencias
 
-        def get_ausencias_hoy(self):
+        def get_ausencias_hoy(self, dia=None):
             return ausencias
 
         def get_horarios_by_dia(self, dia):
@@ -155,6 +173,36 @@ def test_motor_guardias_integration_asigna_guardia_a_profesor_presente(monkeypat
     ranking_ids = [item.profesor.id for item in resultado["ranking_profesores"]]
     assert ranking_ids == [1]
     assert ranking_ids[0] == 1
+
+
+def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
+    """Una ausencia insertada manualmente en BD debe ser detectada por el motor."""
+    db_path = crear_bd_temporal_guardias()
+
+    try:
+        db_manager = DBManager(db_path)
+        profesor_ausente = db_manager.insert_profesor(Profesor(nombre="Profesor Ausente", rfid="GA1", activo=1))
+        profesor_presente = db_manager.insert_profesor(Profesor(nombre="Profesor Presente", rfid="GA2", activo=1))
+
+        dia_prueba = "2026-04-15"
+        dia_semana = datetime.strptime(dia_prueba, "%Y-%m-%d").strftime("%A").capitalize()
+
+        db_manager.insert_presencia(Presencia(profesor_id=profesor_presente.id, timestamp=f"{dia_prueba} 08:00:00", tipo="entrada"))
+        db_manager.insert_horario(Horario(profesor_id=profesor_ausente.id, dia=dia_semana, hora=2, aula="A204", asignatura="Historia"))
+        db_manager.insert_ausencia(Ausencia(profesor_id=profesor_ausente.id, dia=dia_prueba, hora=2, motivo="Consulta médica"))
+
+        motor = MotorGuardias(db_path=db_path)
+        resultado = motor.calcular_guardias(dia=dia_prueba)
+    finally:
+        os.remove(db_path)
+
+    assert len(resultado["guardias"]) == 1
+    guardia = resultado["guardias"][0]
+    assert guardia.profesor_ausente_id == profesor_ausente.id
+    assert guardia.aula == "A204"
+    assert guardia.hora == 2
+    assert len(resultado["ranking_profesores"]) == 1
+    assert resultado["ranking_profesores"][0].profesor.id == profesor_presente.id
 
 
 # --- Pruebas de modelos de dominio (1.1.5.4) ---

@@ -91,32 +91,32 @@ class DBManager:
 
     # ==================== PRESENCIA ====================
 
-    def get_presencia_hoy(self, profesor_id):
+    def get_presencia_hoy(self, profesor_id, fecha=None):
         """Obtiene el último registro de presencia del día para un profesor."""
         from datetime import datetime
-        hoy = datetime.now().strftime("%Y-%m-%d")
+        fecha = fecha or datetime.now().strftime("%Y-%m-%d")
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM presencia
             WHERE profesor_id = ? AND date(timestamp) = ?
             ORDER BY timestamp DESC LIMIT 1
-        """, (profesor_id, hoy))
+        """, (profesor_id, fecha))
         row = cursor.fetchone()
         conn.close()
         return Presencia(*row) if row else None
 
-    def get_presencias_hoy(self):
+    def get_presencias_hoy(self, fecha=None):
         """Obtiene todos los registros de presencia del día."""
         from datetime import datetime
-        hoy = datetime.now().strftime("%Y-%m-%d")
+        fecha = fecha or datetime.now().strftime("%Y-%m-%d")
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             SELECT * FROM presencia
             WHERE date(timestamp) = ?
             ORDER BY profesor_id, timestamp
-        """, (hoy,))
+        """, (fecha,))
         rows = cursor.fetchall()
         conn.close()
         return [Presencia(*row) for row in rows]
@@ -138,13 +138,13 @@ class DBManager:
 
     # ==================== AUSENCIAS ====================
 
-    def get_ausencias_hoy(self):
+    def get_ausencias_hoy(self, fecha=None):
         """Obtiene las ausencias del día."""
         from datetime import datetime
-        hoy = datetime.now().strftime("%Y-%m-%d")
+        fecha = fecha or datetime.now().strftime("%Y-%m-%d")
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM ausencias WHERE dia = ?", (hoy,))
+        cursor.execute("SELECT * FROM ausencias WHERE dia = ?", (fecha,))
         rows = cursor.fetchall()
         conn.close()
         return [Ausencia(*row) for row in rows]

@@ -58,7 +58,13 @@ class MotorGuardias:
             horarios_profesor = self.db_manager.get_horarios_by_dia(dia_semana)
             horario_ausente = next((h for h in horarios_profesor if h.profesor_id == ausencia.profesor_id and h.hora == ausencia.hora), None)
             if horario_ausente:
-                guardia = Guardia(dia_semana, ausencia.hora, horario_ausente.aula, ausencia.profesor_id)
+                guardia = Guardia(
+                    dia_semana,
+                    ausencia.hora,
+                    horario_ausente.aula,
+                    ausencia.profesor_id,
+                    asignatura=horario_ausente.asignatura,
+                )
                 guardias.append(guardia)
 
         horas_con_guardias = set(g.hora for g in guardias)

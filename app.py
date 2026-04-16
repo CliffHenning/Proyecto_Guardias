@@ -61,13 +61,22 @@ def obtener_datos_guardias(db_path=None, dia=None):
 
     guardias = []
     for guardia in resultado["guardias"]:
+        guardia_registrada = guardia.esta_cubierta() and db_manager.guardia_ya_registrada(
+            guardia.dia,
+            guardia.hora,
+            guardia.aula,
+            guardia.profesor_asignado,
+        )
         guardias.append({
             "dia": guardia.dia,
             "hora": guardia.hora,
             "aula": guardia.aula,
+            "asignatura": guardia.asignatura or "Sin asignatura",
+            "profesor_asignado_id": guardia.profesor_asignado,
             "profesor_ausente": _obtener_nombre_profesor(db_manager, guardia.profesor_ausente_id),
             "profesor_asignado": _obtener_nombre_profesor(db_manager, guardia.profesor_asignado),
-            "estado": "Cubierta" if guardia.esta_cubierta() else "Pendiente",
+            "estado": "Registrada" if guardia_registrada else "Cubierta" if guardia.esta_cubierta() else "Pendiente",
+            "registrada": guardia_registrada,
         })
 
     return {
@@ -89,6 +98,31 @@ def index():
 def vista_guardias():
     datos_guardias = obtener_datos_guardias()
     return render_template("guardias.html", datos=datos_guardias)
+
+
+@app.route("/guardias/registrar", methods=["POST"])
+def registrar_guardia():
+    db_path = _obtener_db_path()
+    dia = request.form.get("dia")
+    hora = request.form.get("hora", type=int)
+    aula = request.form.get("aula")
+    profesor_asignado = request.form.get("profesor_asignado", type=int)
+
+    if not dia or hora is None or not aula or profesor_asignado is None:
+        flash("Datos incompletos para registrar la guardia", "error")
+        return redirect(url_for("vista_guardias"))
+
+    try:
+        db_manager = DBManager(db_path)
+        registrado = db_manager.registrar_guardia_realizada(dia, hora, aula, profesor_asignado)
+        if registrado:
+            flash("Guardia registrada correctamente", "success")
+        else:
+            flash("La guardia ya estaba registrada", "error")
+    except sqlite3.Error as e:
+        flash(f"Error al registrar la guardia: {str(e)}", "error")
+
+    return redirect(url_for("vista_guardias"))
 
 @app.route("/presencia")
 def vista_presencia():

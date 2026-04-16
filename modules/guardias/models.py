@@ -7,18 +7,20 @@ class Guardia:
     utilizado durante el proceso de cálculo de guardias.
     """
 
-    def __init__(self, dia, hora, aula, profesor_ausente_id=None):
+    def __init__(self, dia, hora, aula, profesor_ausente_id=None, asignatura=None):
         """
         Args:
             dia: Día de la semana (ej: 'Lunes')
             hora: Hora del día (ej: 1, 2, 3...)
             aula: Aula que necesita cobertura (ej: 'Aula 101')
             profesor_ausente_id: ID del profesor ausente (opcional)
+            asignatura: Asignatura afectada por la ausencia (opcional)
         """
         self.dia = dia
         self.hora = hora
         self.aula = aula
         self.profesor_ausente_id = profesor_ausente_id
+        self.asignatura = asignatura
         self.profesor_asignado = None
         self.prioridad = 0
 
@@ -31,6 +33,8 @@ class Guardia:
         return self.profesor_asignado is not None
 
     def __str__(self):
+        if self.asignatura:
+            return f"Guardia: {self.dia} {self.hora}h - {self.aula} ({self.asignatura})"
         return f"Guardia: {self.dia} {self.hora}h - {self.aula}"
 
     def __repr__(self):
@@ -60,13 +64,18 @@ class ProfesorDisponible:
         """
         Calcula la puntuación de prioridad para ordenar profesores.
         Criterios (orden de importancia):
-        1. Menos guardias en la semana actual
-        2. Menos guardias acumuladas totales
+        1. Menos guardias acumuladas totales
+        2. Menos guardias en la semana actual
+        3. Menor carga lectiva
 
         Returns:
-            tuple: (guardias_semana, guardias_acumuladas) para ordenación
+            tuple: (guardias_acumuladas, guardias_semana, carga_lectiva) para ordenación
         """
-        return (self.profesor.guardias_semana, self.profesor.guardias_acumuladas)
+        return (
+            self.profesor.guardias_acumuladas,
+            self.profesor.guardias_semana,
+            getattr(self.profesor, 'carga_lectiva', 0),
+        )
 
     def puede_hacer_guardia(self, hora_solicitada):
         """

@@ -51,6 +51,18 @@
     </nav>
 
     <main class="container app-shell py-4 py-lg-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <section class="mb-4">
+            {% for category, message in messages %}
+            <div class="alert {{ 'alert-success' if category == 'success' else 'alert-danger' }} mb-2" role="alert">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+        {% endwith %}
+
         <section class="page-hero p-4 p-lg-5 mb-4">
             <div class="row g-4 align-items-center">
                 <div class="col-lg-8">
@@ -91,16 +103,17 @@
         <section class="card stat-card mb-4">
             <div class="card-body p-4">
                 <h2 class="h4 mb-3">Profesores ordenados por prioridad</h2>
+                <p class="text-secondary small mb-3">Criterios aplicados: menos guardias acumuladas, menos guardias esta semana y menor carga lectiva.</p>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th>Posicion</th>
                                 <th>Profesor</th>
-                                <th>Hora disponible</th>
-                                <th>Guardias semana</th>
                                 <th>Guardias acumuladas</th>
+                                <th>Guardias semana</th>
                                 <th>Carga lectiva</th>
+                                <th>Hora disponible</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -108,10 +121,10 @@
                             <tr>
                                 <td>{{ profesor.posicion }}</td>
                                 <td class="fw-medium">{{ profesor.nombre }}</td>
-                                <td>{{ profesor.hora_disponible }}</td>
-                                <td>{{ profesor.guardias_semana }}</td>
                                 <td>{{ profesor.guardias_acumuladas }}</td>
+                                <td>{{ profesor.guardias_semana }}</td>
                                 <td>{{ profesor.carga_lectiva }}</td>
+                                <td>{{ profesor.hora_disponible }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -130,9 +143,11 @@
                                 <th>Dia</th>
                                 <th>Hora</th>
                                 <th>Aula</th>
+                                <th>Asignatura</th>
                                 <th>Profesor ausente</th>
                                 <th>Profesor asignado</th>
                                 <th>Estado</th>
+                                <th>Accion</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -141,9 +156,27 @@
                                 <td>{{ guardia.dia }}</td>
                                 <td>{{ guardia.hora }}</td>
                                 <td>{{ guardia.aula }}</td>
+                                <td>{{ guardia.asignatura }}</td>
                                 <td>{{ guardia.profesor_ausente }}</td>
                                 <td>{{ guardia.profesor_asignado }}</td>
-                                <td><span class="badge text-bg-success">{{ guardia.estado }}</span></td>
+                                <td>
+                                    <span class="badge {{ 'text-bg-primary' if guardia.registrada else 'text-bg-success' if guardia.estado == 'Cubierta' else 'text-bg-warning' }}">
+                                        {{ guardia.estado }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if guardia.profesor_asignado_id and not guardia.registrada %}
+                                    <form method="post" action="{{ url_for('registrar_guardia') }}" class="d-inline">
+                                        <input type="hidden" name="dia" value="{{ guardia.dia }}">
+                                        <input type="hidden" name="hora" value="{{ guardia.hora }}">
+                                        <input type="hidden" name="aula" value="{{ guardia.aula }}">
+                                        <input type="hidden" name="profesor_asignado" value="{{ guardia.profesor_asignado_id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-primary">Registrar guardia</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-secondary small">Sin accion disponible</span>
+                                    {% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

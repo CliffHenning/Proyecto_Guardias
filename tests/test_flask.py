@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import app as app_module
 from modules.db.db_manager import DBManager
-from modules.db.models import Profesor, Horario, Ausencia
+from modules.db.models import Profesor, Horario, Ausencia, Presencia
 
 
 def crear_bd_temporal():
@@ -244,9 +244,126 @@ def test_ruta_guardias_muestra_datos_calculados_desde_bd(monkeypatch, cliente):
     assert b"Profesor Cobertura" in respuesta_guardias.data
     assert b"Profesor Ausente" in respuesta_guardias.data
     assert b"A101" in respuesta_guardias.data
+    assert "Matemáticas".encode("utf-8") in respuesta_guardias.data
     assert b"Cubierta" in respuesta_guardias.data
     assert b"Profesores ordenados por prioridad" in respuesta_guardias.data
     assert b"Aulas que requieren cobertura" in respuesta_guardias.data
+
+
+def test_ruta_guardias_muestra_ranking_ordenado_segun_criterios(cliente):
+    """La tabla de ranking debe respetar el orden definido por las reglas de prioridad."""
+    db_path = crear_bd_temporal()
+    app_module.app.config["DB_PATH"] = db_path
+
+    try:
+        db_manager = DBManager(db_path)
+        profesor_ausente = db_manager.insert_profesor(Profesor(nombre="Profesor Ausente", rfid="RA1", activo=1))
+        profesor_mejor = db_manager.insert_profesor(
+            Profesor(nombre="Profesor Mejor Prioridad", rfid="RA2", activo=1, guardias_acumuladas=0, guardias_semana=0)
+        )
+        profesor_peor = db_manager.insert_profesor(
+            Profesor(nombre="Profesor Peor Prioridad", rfid="RA3", activo=1, guardias_acumuladas=1, guardias_semana=0)
+        )
+
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        dia_semana = datetime.strptime(hoy, "%Y-%m-%d").strftime("%A").capitalize()
+
+        db_manager.insert_horario(Horario(profesor_id=profesor_ausente.id, dia=dia_semana, hora=1, aula="A101", asignatura="Matemáticas"))
+        db_manager.insert_horario(Horario(profesor_id=profesor_mejor.id, dia=dia_semana, hora=2, aula="B201", asignatura="Física"))
+        db_manager.insert_horario(Horario(profesor_id=profesor_peor.id, dia=dia_semana, hora=3, aula="B202", asignatura="Química"))
+        db_manager.insert_ausencia(Ausencia(profesor_id=profesor_ausente.id, dia=hoy, hora=1, motivo="Enfermedad"))
+        db_manager.insert_presencia(Presencia(profesor_id=profesor_mejor.id, timestamp=f"{hoy} 08:00:00", tipo="entrada"))
+        db_manager.insert_presencia(Presencia(profesor_id=profesor_peor.id, timestamp=f"{hoy} 08:05:00", tipo="entrada"))
+
+        respuesta = cliente.get("/guardias")
+    finally:
+        app_module.app.config["DB_PATH"] = "ies.db"
+        os.remove(db_path)
+
+    assert respuesta.status_code == 200
+    assert b"menos guardias acumuladas" in respuesta.data
+    assert b"Guardias acumuladas" in respuesta.data
+
+    mejor = "Profesor Mejor Prioridad".encode("utf-8")
+    peor = "Profesor Peor Prioridad".encode("utf-8")
+    assert mejor in respuesta.data
+    assert peor in respuesta.data
+    assert respuesta.data.index(mejor) < respuesta.data.index(peor)
+
+
+def test_registrar_guardia_desde_vista_actualiza_bd_y_refresca_valores(cliente):
+    """Registrar una guardia desde la vista debe incrementar los contadores y refrescar el ranking."""
+    db_path = crear_bd_temporal()
+    app_module.app.config["DB_PATH"] = db_path
+
+    try:
+        db_manager = DBManager(db_path)
+        profesor_ausente = db_manager.insert_profesor(Profesor(nombre="Profesor Ausente", rfid="GX1", activo=1))
+        profesor_guardia = db_manager.insert_profesor(
+            Profesor(nombre="Profesor Guardia", rfid="GX2", activo=1, guardias_acumuladas=0, guardias_semana=0)
+        )
+
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        dia_semana = datetime.strptime(hoy, "%Y-%m-%d").strftime("%A").capitalize()
+
+        db_manager.insert_horario(Horario(profesor_id=profesor_ausente.id, dia=dia_semana, hora=1, aula="A101", asignatura="Matemáticas"))
+        db_manager.insert_horario(Horario(profesor_id=profesor_guardia.id, dia=dia_semana, hora=2, aula="B203", asignatura="Lengua"))
+        db_manager.insert_ausencia(Ausencia(profesor_id=profesor_ausente.id, dia=hoy, hora=1, motivo="Enfermedad"))
+        db_manager.insert_presencia(Presencia(profesor_id=profesor_guardia.id, timestamp=f"{hoy} 08:00:00", tipo="entrada"))
+
+        respuesta = cliente.post(
+            "/guardias/registrar",
+            data={"dia": dia_semana, "hora": 1, "aula": "A101", "profesor_asignado": profesor_guardia.id},
+            follow_redirects=True,
+        )
+
+        profesor_actualizado = db_manager.get_profesor_by_id(profesor_guardia.id)
+        guardias_registradas = db_manager.get_guardias_by_dia(dia_semana)
+    finally:
+        app_module.app.config["DB_PATH"] = "ies.db"
+        os.remove(db_path)
+
+    assert respuesta.status_code == 200
+    assert b"Guardia registrada correctamente" in respuesta.data
+    assert b"Registrar guardia" not in respuesta.data
+    assert b"Registrada" in respuesta.data
+    assert profesor_actualizado.guardias_acumuladas == 1
+    assert profesor_actualizado.guardias_semana == 1
+    assert len(guardias_registradas) == 1
+    assert guardias_registradas[0].profesor_asignado == profesor_guardia.id
+    assert b">1<" in respuesta.data
+
+
+def test_registrar_guardia_repetida_no_duplica_contadores(cliente):
+    """Una guardia registrada dos veces no debe incrementar otra vez los contadores."""
+    db_path = crear_bd_temporal()
+    app_module.app.config["DB_PATH"] = db_path
+
+    try:
+        db_manager = DBManager(db_path)
+        profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Unico", rfid="GX3", activo=1))
+
+        primera = cliente.post(
+            "/guardias/registrar",
+            data={"dia": "Lunes", "hora": 2, "aula": "A102", "profesor_asignado": profesor.id},
+            follow_redirects=True,
+        )
+        segunda = cliente.post(
+            "/guardias/registrar",
+            data={"dia": "Lunes", "hora": 2, "aula": "A102", "profesor_asignado": profesor.id},
+            follow_redirects=True,
+        )
+
+        profesor_actualizado = db_manager.get_profesor_by_id(profesor.id)
+    finally:
+        app_module.app.config["DB_PATH"] = "ies.db"
+        os.remove(db_path)
+
+    assert primera.status_code == 200
+    assert segunda.status_code == 200
+    assert b"La guardia ya estaba registrada" in segunda.data
+    assert profesor_actualizado.guardias_acumuladas == 1
+    assert profesor_actualizado.guardias_semana == 1
 
 
 def test_ruta_guardias_sin_bd_inicializada_devuelve_200(cliente):

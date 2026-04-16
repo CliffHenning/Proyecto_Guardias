@@ -194,6 +194,58 @@ class DBManager:
         conn.commit()
         conn.close()
 
+    def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado):
+        """Indica si una guardia ya fue registrada previamente."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id FROM guardias
+            WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
+            LIMIT 1
+            """,
+            (dia, hora, aula, profesor_asignado),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row is not None
+
+    def registrar_guardia_realizada(self, dia, hora, aula, profesor_asignado):
+        """Registra una guardia realizada y actualiza los contadores del profesor."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id FROM guardias
+            WHERE dia = ? AND hora = ? AND aula = ? AND profesor_asignado = ? AND cubierta = 1
+            LIMIT 1
+            """,
+            (dia, hora, aula, profesor_asignado),
+        )
+        if cursor.fetchone():
+            conn.close()
+            return False
+
+        cursor.execute(
+            """
+            INSERT INTO guardias (dia, hora, aula, profesor_asignado, cubierta)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            (dia, hora, aula, profesor_asignado),
+        )
+        cursor.execute(
+            """
+            UPDATE profesores
+            SET guardias_acumuladas = guardias_acumuladas + 1,
+                guardias_semana = guardias_semana + 1
+            WHERE id = ?
+            """,
+            (profesor_asignado,),
+        )
+        conn.commit()
+        conn.close()
+        return True
+
     def actualizar_guardias_profesor(self, profesor_id):
         """Incrementa los contadores de guardias para un profesor."""
         conn = self.get_connection()

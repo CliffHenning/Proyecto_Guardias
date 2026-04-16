@@ -200,6 +200,7 @@ def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
     guardia = resultado["guardias"][0]
     assert guardia.profesor_ausente_id == profesor_ausente.id
     assert guardia.aula == "A204"
+    assert guardia.asignatura == "Historia"
     assert guardia.hora == 2
     assert len(resultado["ranking_profesores"]) == 1
     assert resultado["ranking_profesores"][0].profesor.id == profesor_presente.id
@@ -209,12 +210,13 @@ def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
 
 def test_guardia_atributos_iniciales_correctos():
     """Un objeto Guardia recién creado tiene los atributos esperados."""
-    guardia = Guardia(dia="Lunes", hora=2, aula="Aula 101", profesor_ausente_id=5)
+    guardia = Guardia(dia="Lunes", hora=2, aula="Aula 101", profesor_ausente_id=5, asignatura="Matemáticas")
 
     assert guardia.dia == "Lunes"
     assert guardia.hora == 2
     assert guardia.aula == "Aula 101"
     assert guardia.profesor_ausente_id == 5
+    assert guardia.asignatura == "Matemáticas"
     assert guardia.profesor_asignado is None
     assert guardia.prioridad == 0
 
@@ -241,6 +243,7 @@ def test_guardia_sin_profesor_ausente_es_valida():
     guardia = Guardia(dia="Jueves", hora=4, aula="Aula 104")
 
     assert guardia.profesor_ausente_id is None
+    assert guardia.asignatura is None
     assert not guardia.esta_cubierta()
 
 
@@ -258,7 +261,7 @@ def test_profesor_disponible_puntuacion_prioridad_calculada_al_crear():
     profesor = Profesor(id=1, nombre="Ana García", activo=1, guardias_acumuladas=3, guardias_semana=2)
     disponible = ProfesorDisponible(profesor, hora_disponible=4)
 
-    assert disponible.puntuacion_prioridad == (2, 3)
+    assert disponible.puntuacion_prioridad == (3, 2, 0)
 
 
 def test_profesor_disponible_puede_hacer_guardia_hora_correcta():

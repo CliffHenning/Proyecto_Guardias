@@ -17,6 +17,8 @@ app.config.setdefault("AUSENCIA_MINUTOS_GRACIA", 10)
 def _datos_guardias_vacios(fecha):
     return {
         "fecha": fecha,
+        "fecha_texto": _describir_fecha(fecha),
+        "fechas_disponibles": [],
         "resumen": {
             "ausencias_detectadas": 0,
             "guardias_necesarias": 0,
@@ -33,6 +35,20 @@ def _obtener_db_path():
 
 def _obtener_ahora():
     return datetime.now()
+
+
+def _obtener_fecha_consulta(valor_fecha=None, ahora=None):
+    ahora = ahora or _obtener_ahora()
+    if not valor_fecha:
+        return ahora.strftime("%Y-%m-%d")
+
+    return datetime.strptime(valor_fecha, "%Y-%m-%d").strftime("%Y-%m-%d")
+
+
+def _describir_fecha(fecha):
+    fecha_dt = datetime.strptime(fecha, "%Y-%m-%d")
+    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    return f"{dias[fecha_dt.weekday()]} {fecha}"
 
 
 def _obtener_nombre_profesor(db_manager, profesor_id):
@@ -88,7 +104,7 @@ def _agrupar_ranking_por_profesor(ranking_profesores):
 
 def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
     ahora = ahora or _obtener_ahora()
-    fecha = dia or ahora.strftime("%Y-%m-%d")
+    fecha = _obtener_fecha_consulta(dia, ahora=ahora)
     db_path = db_path or _obtener_db_path()
 
     try:
@@ -98,8 +114,13 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
                 ahora=ahora,
                 margen_minutos=app.config.get("AUSENCIA_MINUTOS_GRACIA", 10),
             )
-        resultado = motor.calcular_guardias(dia=fecha)
         db_manager = motor.db_manager
+        if dia is None and not db_manager.get_ausencias_hoy(fecha):
+            ultima_fecha_con_ausencias = db_manager.get_ultima_fecha_con_ausencias()
+            if ultima_fecha_con_ausencias:
+                fecha = ultima_fecha_con_ausencias
+        resultado = motor.calcular_guardias(dia=fecha)
+        fechas_disponibles = db_manager.get_fechas_con_ausencias()
     except (sqlite3.Error, ValueError):
         return _datos_guardias_vacios(fecha)
 
@@ -128,6 +149,8 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
 
     return {
         "fecha": fecha,
+        "fecha_texto": _describir_fecha(fecha),
+        "fechas_disponibles": fechas_disponibles,
         "resumen": {
             "ausencias_detectadas": len(guardias),
             "guardias_necesarias": len(guardias),
@@ -143,7 +166,12 @@ def index():
 
 @app.route("/guardias")
 def vista_guardias():
-    datos_guardias = obtener_datos_guardias()
+    fecha = request.args.get("fecha")
+    try:
+        datos_guardias = obtener_datos_guardias(dia=fecha)
+    except ValueError:
+        flash("Fecha no válida", "error")
+        return redirect(url_for("vista_guardias"))
     return render_template("guardias.html", datos=datos_guardias)
 
 
@@ -157,7 +185,7 @@ def registrar_guardia():
 
     if not dia or hora is None or not aula or profesor_asignado is None:
         flash("Datos incompletos para registrar la guardia", "error")
-        return redirect(url_for("vista_guardias"))
+        return redirect(url_for("vista_guardias", fecha=dia))
 
     try:
         db_manager = DBManager(db_path)
@@ -169,7 +197,7 @@ def registrar_guardia():
     except sqlite3.Error as e:
         flash(f"Error al registrar la guardia: {str(e)}", "error")
 
-    return redirect(url_for("vista_guardias"))
+    return redirect(url_for("vista_guardias", fecha=dia))
 
 @app.route("/presencia")
 def vista_presencia():

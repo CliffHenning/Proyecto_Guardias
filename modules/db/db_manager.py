@@ -149,6 +149,20 @@ class DBManager:
         conn.close()
         return [Ausencia(*row) for row in rows]
 
+    def get_fechas_con_ausencias(self):
+        """Devuelve las fechas con ausencias registradas, de más reciente a más antigua."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT dia FROM ausencias ORDER BY dia DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+
+    def get_ultima_fecha_con_ausencias(self):
+        """Devuelve la última fecha con ausencias registradas."""
+        fechas = self.get_fechas_con_ausencias()
+        return fechas[0] if fechas else None
+
     def get_ausencias_profesor_hoy(self, profesor_id, fecha=None):
         """Obtiene las ausencias activas de un profesor para el día indicado."""
         from datetime import datetime

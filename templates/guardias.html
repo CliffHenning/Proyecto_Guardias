@@ -67,7 +67,7 @@
             <div class="row g-4 align-items-center">
                 <div class="col-lg-8">
                     <h1 class="display-6 fw-semibold mb-3">Guardias y Sustituciones</h1>
-                    <p class="text-secondary mb-2">Fecha consultada: {{ datos.fecha }}</p>
+                    <p class="text-secondary mb-2">Fecha consultada: {{ datos.fecha_texto }}</p>
                     <p class="mb-0 text-secondary">La vista muestra las guardias calculadas con las ausencias y horarios disponibles para esa fecha.</p>
                 </div>
             </div>
@@ -159,7 +159,7 @@
                         <tbody>
                             {% for guardia in datos.guardias %}
                             <tr>
-                                <td>{{ guardia.dia }}</td>
+                                <td>{{ datos.fecha_texto }}</td>
                                 <td>{{ guardia.hora_texto }}</td>
                                 <td>{{ guardia.aula }}</td>
                                 <td>{{ guardia.asignatura }}</td>

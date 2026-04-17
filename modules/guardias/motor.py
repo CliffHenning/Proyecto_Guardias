@@ -135,7 +135,7 @@ class MotorGuardias:
             horarios_profesor = self.db_manager.get_horarios_by_dia(dia_semana)
             horario_ausente = next((h for h in horarios_profesor if h.profesor_id == ausencia.profesor_id and h.hora == ausencia.hora), None)
             guardia = Guardia(
-                dia_semana,
+                ausencia.dia,
                 ausencia.hora,
                 horario_ausente.aula if horario_ausente else "Aula por determinar",
                 ausencia.profesor_id,
@@ -147,7 +147,16 @@ class MotorGuardias:
         profesores_disponibles_global = set()
 
         for hora in horas_con_guardias:
-            profesores_disponibles_hora = determinar_profesores_disponibles(profesores, presencias, ausencias, hora, self.db_manager)
+            fecha_guardia = next(g.dia for g in guardias if g.hora == hora)
+            dia_semana = obtener_dia_semana_es(datetime.strptime(fecha_guardia, "%Y-%m-%d"))
+            profesores_disponibles_hora = determinar_profesores_disponibles(
+                profesores,
+                presencias,
+                ausencias,
+                hora,
+                self.db_manager,
+                dia_semana=dia_semana,
+            )
             profesores_disponibles_global.update(profesores_disponibles_hora)
 
         ranking_profesores = calcular_ranking_profesores(list(profesores_disponibles_global))

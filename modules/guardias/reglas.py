@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from modules.guardias.models import ProfesorDisponible
 
 
-def determinar_profesores_disponibles(profesores, presencias, ausencias, hora, db_manager):
+def determinar_profesores_disponibles(profesores, presencias, ausencias, hora, db_manager, dia_semana=None):
     """
     Determina qué profesores están disponibles para hacer guardia en una hora específica.
     Un profesor está disponible si:
@@ -32,6 +32,14 @@ def determinar_profesores_disponibles(profesores, presencias, ausencias, hora, d
     for profesor in profesores:
         ausente_hora = any(a.profesor_id == profesor.id and a.hora == hora for a in ausencias)
         if ausente_hora:
+            continue
+
+        horarios_dia = db_manager.get_horarios_by_dia(dia_semana) if dia_semana else []
+        tiene_clase_hora = any(
+            horario.profesor_id == profesor.id and horario.hora == hora
+            for horario in horarios_dia
+        )
+        if tiene_clase_hora:
             continue
 
         presencias_profesor = sorted([p for p in presencias if p.profesor_id == profesor.id], key=lambda p: p.timestamp)

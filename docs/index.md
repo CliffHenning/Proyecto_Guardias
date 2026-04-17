@@ -1,23 +1,58 @@
-# Sistema de Guardias y Presencia
+# Sistema de Gestión de Guardias y Presencia
 
-Documentacion tecnica del proyecto para la gestion de guardias escolares y el registro de presencia del profesorado.
+Aplicación web desarrollada con Flask para gestionar el control de presencia del profesorado y visualizar las guardias que deben cubrirse cuando se detectan ausencias.
 
-## Objetivo
+Esta portada resume el estado real del proyecto y enlaza con el resto de la documentación técnica. Los detalles extensos de implementación se mantienen en las páginas específicas de `docs/`.
 
-El sistema permite:
+## Qué hace el proyecto
 
-- Registrar la presencia del profesorado mediante un metodo de identificacion configurable.
-- Gestionar ausencias y calcular automaticamente las guardias.
-- Exponer una interfaz web con Flask para consulta y operacion basica.
-- Mantener la informacion en una base de datos SQLite.
+- Registra presencia del profesorado mediante métodos configurables.
+- Muestra el estado actual del profesorado en la interfaz web.
+- Detecta ausencias del día a partir de horarios y fichajes.
+- Genera guardias pendientes para las aulas que se quedan sin profesor.
+- Ordena a los candidatos a cubrir guardia según criterios de prioridad.
+- Permite registrar desde la web qué profesor ha cubierto una guardia.
 
-## Modulos principales
+## Estado actual del repositorio
 
-- Flask: punto de entrada web y rutas de la aplicacion.
-- Guardias: motor de calculo y reglas de asignacion.
-- Presencia: identificacion del profesorado y registro de entradas o salidas.
-- Base de datos: acceso a SQLite, modelos y esquema.
+- La aplicación principal está en `app.py`.
+- La base de datos SQLite usada por defecto es `ies.db`.
+- El método de presencia se controla con la variable de entorno `METODO_PRESENCIA`.
+- En el estado actual están integrados los flujos de RFID y huella.
+- El reconocimiento facial no está implementado en este repositorio.
 
-## Contenido de esta documentacion
+## Arranque rápido
 
-En las siguientes secciones se describe la arquitectura del sistema, la base de datos, el modulo Flask, la logica de guardias, el modulo de presencia, las pruebas unitarias y el despliegue en Raspberry Pi.
+```bash
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-presence.txt
+python -m modules.db.init_db
+python app.py
+```
+
+La aplicación queda disponible en `http://127.0.0.1:5000`.
+
+## Estructura de la documentación
+
+- `arquitectura.md`: visión general de la arquitectura y separación por capas.
+- `base_datos.md`: tablas, persistencia y papel de `db_manager.py`.
+- `flask.md`: rutas, vistas y responsabilidad de la capa web.
+- `guardias.md`: motor de guardias, ranking y registro de coberturas.
+- `presencia.md`: identificación y registro de entrada y salida.
+- `pruebas.md`: organización y ejecución de la suite de tests.
+- `despliegue.md`: instalación y despliegue en Raspberry Pi.
+
+## Recorrido recomendado
+
+Si quieres entender el proyecto de forma ordenada:
+
+1. Empieza por arquitectura.
+2. Continúa por base de datos, presencia y guardias.
+3. Revisa Flask para ver cómo se expone todo en la interfaz.
+4. Termina con pruebas y despliegue.
+
+## Notas de mantenimiento
+
+- Esta página debe funcionar como portada, no como copia del enunciado original.
+- Si cambia el comportamiento real del código, hay que actualizar primero esta portada y después la página temática afectada.

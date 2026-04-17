@@ -1,143 +1,14 @@
 import sys
 import os
-import sqlite3
-import tempfile
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from modules.db.models import Profesor, Horario, Presencia, Ausencia
-from modules.db.db_manager import DBManager
 from modules.guardias.models import Guardia, ProfesorDisponible
-from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores, asignar_guardias
-from modules.guardias.motor import MotorGuardias, obtener_dia_semana_es
+from modules.guardias.motor import MotorGuardias, obtener_dia_semana_es, obtener_hora_guardia_actual
 
 
-class StubDbManager:
-    def __init__(self, horarios_by_dia=None):
-        self.horarios_by_dia = horarios_by_dia or {}
-
-    # Retorna horarios simulados por día
-
-    def get_horarios_by_dia(self, dia):
-        return self.horarios_by_dia.get(dia, [])
-
-
-def crear_bd_temporal_guardias():
-    fd, db_path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-
-    conn = sqlite3.connect(db_path)
-    schema_path = os.path.join(os.path.dirname(__file__), '..', 'modules', 'db', 'schema.sql')
-    with open(schema_path, 'r', encoding='utf-8') as schema_file:
-        conn.executescript(schema_file.read())
-    conn.commit()
-    conn.close()
-
-    return db_path
-
-
-def test_determinar_profesores_disponibles_calcula_carga_lectiva_y_devuelve_disponible():
-    profesor = Profesor(id=1, nombre="RFID Profesor", rfid="ABC123", activo=1, guardias_acumuladas=0, guardias_semana=0)
-    presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
-    ausencias = []
-
-    horarios = [Horario(profesor_id=1, dia="Lunes", hora=1, aula="A101", asignatura="Matemáticas")]
-    db_manager = StubDbManager(horarios_by_dia={"Lunes": horarios, "Martes": [], "Miércoles": [], "Jueves": [], "Viernes": []})
-
-    disponibles = determinar_profesores_disponibles([profesor], presencias, ausencias, 1, db_manager)
-
-    assert len(disponibles) == 1
-    disponible = disponibles[0]
-    assert disponible.profesor.id == 1
-    assert disponible.hora_disponible == 1
-    assert disponible.profesor.carga_lectiva == 1
-    assert disponible.profesor.rfid == "ABC123"
-
-
-def test_profesor_disponible_puede_hacer_guardia_y_activo():
-    profesor = Profesor(id=10, nombre="Profesor Disponible", activo=1, guardias_acumuladas=0, guardias_semana=0)
-    disponible = ProfesorDisponible(profesor, hora_disponible=2)
-
-    assert disponible.puede_hacer_guardia(2)
-    assert not disponible.puede_hacer_guardia(1)
-
-
-def test_profesor_disponible_inactivo_no_puede_hacer_guardia():
-    profesor = Profesor(id=11, nombre="Profesor Inactivo", activo=0, guardias_acumuladas=0, guardias_semana=0)
-    disponible = ProfesorDisponible(profesor, hora_disponible=2)
-
-    assert not disponible.puede_hacer_guardia(2)
-
-
-def test_calcular_ranking_profesores_resuelve_empate_por_carga_lectiva():
-    profesor1 = Profesor(id=1, nombre="Profesor A", guardias_acumuladas=0, guardias_semana=0)
-    profesor2 = Profesor(id=2, nombre="Profesor B", guardias_acumuladas=0, guardias_semana=0)
-    profesor1.carga_lectiva = 3
-    profesor2.carga_lectiva = 1
-
-    disp1 = ProfesorDisponible(profesor1, hora_disponible=1)
-    disp2 = ProfesorDisponible(profesor2, hora_disponible=1)
-
-    ranking = calcular_ranking_profesores([disp1, disp2])
-
-    assert [item.profesor.id for item in ranking] == [2, 1]
-
-
-def test_asignar_guardias_solo_asigna_quien_esta_disponible_para_la_hora():
-    guardia = Guardia(dia="Lunes", hora=2, aula="A101", profesor_ausente_id=99)
-
-    prof1 = Profesor(id=1, nombre="Profesor A", activo=1, guardias_acumuladas=0, guardias_semana=0)
-    prof2 = Profesor(id=2, nombre="Profesor B", activo=1, guardias_acumuladas=0, guardias_semana=0)
-
-    disp1 = ProfesorDisponible(prof1, hora_disponible=1)
-    disp2 = ProfesorDisponible(prof2, hora_disponible=2)
-
-    result_guardias = asignar_guardias([guardia], [disp1, disp2])
-
-    assert result_guardias[0].profesor_asignado == 2
-    assert prof1.guardias_semana == 0
-    assert prof1.guardias_acumuladas == 0
-    assert prof2.guardias_semana == 1
-    assert prof2.guardias_acumuladas == 1
-
-
-def test_calcular_ranking_profesores_orden_correcto():
-    profesor1 = Profesor(id=1, nombre="Profesor A", guardias_acumuladas=0, guardias_semana=1)
-    profesor2 = Profesor(id=2, nombre="Profesor B", guardias_acumuladas=1, guardias_semana=0)
-    profesor3 = Profesor(id=3, nombre="Profesor C", guardias_acumuladas=0, guardias_semana=0)
-
-    profesor1.carga_lectiva = 3
-    profesor2.carga_lectiva = 2
-    profesor3.carga_lectiva = 5
-
-    disp1 = ProfesorDisponible(profesor1, hora_disponible=1)
-    disp2 = ProfesorDisponible(profesor2, hora_disponible=1)
-    disp3 = ProfesorDisponible(profesor3, hora_disponible=1)
-
-    ranking = calcular_ranking_profesores([disp1, disp2, disp3])
-
-    assert [item.profesor.id for item in ranking] == [3, 1, 2]
-
-
-def test_asignar_guardias_asigna_mejor_profesor_segun_ranking():
-    guardia = Guardia(dia="Lunes", hora=1, aula="A101", profesor_ausente_id=99)
-
-    prof1 = Profesor(id=1, nombre="Profesor A", activo=1, guardias_acumuladas=0, guardias_semana=0)
-    prof2 = Profesor(id=2, nombre="Profesor B", activo=1, guardias_acumuladas=0, guardias_semana=1)
-
-    disp1 = ProfesorDisponible(prof1, hora_disponible=1)
-    disp2 = ProfesorDisponible(prof2, hora_disponible=1)
-
-    result_guardias = asignar_guardias([guardia], [disp1, disp2])
-
-    assert result_guardias[0].profesor_asignado == 1
-    assert prof1.guardias_semana == 1
-    assert prof1.guardias_acumuladas == 1
-    assert prof2.guardias_semana == 1
-    assert prof2.guardias_acumuladas == 0
-
-
-def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_automatica(monkeypatch):
+def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_automatica():
     motor = MotorGuardias(db_path=":memory:")
 
     profesores = [
@@ -175,74 +46,49 @@ def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_au
     assert ranking_ids[0] == 1
 
 
-def test_motor_detecta_ausencia_registrada_manualmente_en_bd():
-    """Una ausencia insertada manualmente en BD debe ser detectada por el motor."""
-    db_path = crear_bd_temporal_guardias()
-
-    try:
-        db_manager = DBManager(db_path)
-        profesor_ausente = db_manager.insert_profesor(Profesor(nombre="Profesor Ausente", rfid="GA1", activo=1))
-        profesor_presente = db_manager.insert_profesor(Profesor(nombre="Profesor Presente", rfid="GA2", activo=1))
-
-        dia_prueba = "2026-04-15"
-        dia_semana = obtener_dia_semana_es(datetime.strptime(dia_prueba, "%Y-%m-%d"))
-
-        db_manager.insert_presencia(Presencia(profesor_id=profesor_presente.id, timestamp=f"{dia_prueba} 08:00:00", tipo="entrada"))
-        db_manager.insert_horario(Horario(profesor_id=profesor_ausente.id, dia=dia_semana, hora=2, aula="A204", asignatura="Historia"))
-        db_manager.insert_ausencia(Ausencia(profesor_id=profesor_ausente.id, dia=dia_prueba, hora=2, motivo="Consulta médica"))
-
-        motor = MotorGuardias(db_path=db_path)
-        resultado = motor.calcular_guardias(dia=dia_prueba)
-    finally:
-        os.remove(db_path)
-
-    assert len(resultado["guardias"]) == 1
-    guardia = resultado["guardias"][0]
-    assert guardia.profesor_ausente_id == profesor_ausente.id
-    assert guardia.aula == "A204"
-    assert guardia.asignatura == "Historia"
-    assert guardia.hora == 2
-    assert guardia.profesor_asignado is None
-    assert len(resultado["ranking_profesores"]) == 1
-    assert resultado["ranking_profesores"][0].profesor.id == profesor_presente.id
-
-
-def test_motor_convierte_ausencia_en_guardia_aunque_falte_horario():
-    """Para depuración, una ausencia sin horario detallado debe seguir apareciendo como guardia pendiente."""
-    motor = MotorGuardias(db_path=":memory:")
-
-    profesores = [Profesor(id=1, nombre="Profesor Presente", activo=1, guardias_acumuladas=0, guardias_semana=0)]
-    presencias = [Presencia(profesor_id=1, timestamp="2026-04-16 08:00:00", tipo="entrada")]
-    ausencias = [Ausencia(profesor_id=99, dia="2026-04-16", hora=2, motivo="Sin horario cargado")]
-
-    class StubManager:
-        def get_profesores(self):
-            return profesores
-
-        def get_presencias_hoy(self, dia=None):
-            return presencias
-
-        def get_ausencias_hoy(self, dia=None):
-            return ausencias
-
-        def get_horarios_by_dia(self, dia):
-            return []
-
-    motor.db_manager = StubManager()
-
-    resultado = motor.calcular_guardias(dia="2026-04-16")
-
-    assert len(resultado["guardias"]) == 1
-    guardia = resultado["guardias"][0]
-    assert guardia.aula == "Aula por determinar"
-    assert guardia.asignatura == "Sin asignatura"
-    assert guardia.hora == 2
-
-
 def test_obtener_dia_semana_es_no_depende_del_locale():
     fecha = datetime.strptime("2026-04-16", "%Y-%m-%d")
 
     assert obtener_dia_semana_es(fecha) == "Jueves"
+
+
+def test_obtener_hora_guardia_actual_aplica_margen_de_tolerancia():
+    antes = datetime.strptime("2026-04-15 08:54:00", "%Y-%m-%d %H:%M:%S")
+    despues = datetime.strptime("2026-04-15 08:55:00", "%Y-%m-%d %H:%M:%S")
+
+    assert obtener_hora_guardia_actual(antes, margen_minutos=10) is None
+    assert obtener_hora_guardia_actual(despues, margen_minutos=10) == 1
+
+
+def test_motor_detecta_ausencias_automaticas_del_tramo_actual():
+    class StubManager:
+        def __init__(self):
+            self.ausencias = {}
+
+        def get_horarios_by_dia(self, dia):
+            return [
+                Horario(profesor_id=10, dia=dia, hora=1, aula="A101", asignatura="Matemáticas"),
+                Horario(profesor_id=20, dia=dia, hora=1, aula="B201", asignatura="Lengua"),
+            ]
+
+        def get_presencias_hoy(self, fecha=None):
+            return [Presencia(profesor_id=20, timestamp=f"{fecha} 08:00:00", tipo="entrada")]
+
+        def ensure_ausencia(self, ausencia):
+            clave = (ausencia.profesor_id, ausencia.dia, ausencia.hora)
+            self.ausencias.setdefault(clave, ausencia)
+            return self.ausencias[clave]
+
+    momento = datetime.strptime("2026-04-15 08:56:00", "%Y-%m-%d %H:%M:%S")
+    motor = MotorGuardias(db_path=":memory:")
+    motor.db_manager = StubManager()
+
+    ausencias = motor.detectar_ausencias_automaticas(ahora=momento, margen_minutos=10)
+
+    assert len(ausencias) == 1
+    assert ausencias[0].profesor_id == 10
+    assert ausencias[0].hora == 1
+    assert ausencias[0].motivo == "Ausencia detectada automáticamente"
 
 
 # --- Pruebas de modelos de dominio (1.1.5.4) ---

@@ -12,18 +12,25 @@ from modules.db.models import Profesor, Horario, Presencia, Ausencia, Guardia
 @pytest.fixture
 def db_manager():
     """Fixture que proporciona un DBManager con base de datos SQLite en memoria."""
-    # Crear base de datos en memoria
     conn = sqlite3.connect(":memory:")
     cursor = conn.cursor()
 
-    # Leer y ejecutar el esquema
     schema_path = os.path.join(os.path.dirname(__file__), '..', 'modules', 'db', 'schema.sql')
     with open(schema_path, 'r') as f:
         schema = f.read()
     cursor.executescript(schema)
     conn.commit()
 
-    # Crear un DBManager personalizado que usa la conexión existente y no la cierra
+    class NoCloseConnection:
+        def __init__(self, connection):
+            self._connection = connection
+
+        def close(self):
+            return None
+
+        def __getattr__(self, name):
+            return getattr(self._connection, name)
+
     class TestDBManager(DBManager):
         def __init__(self, connection):
             self.connection = connection
@@ -31,230 +38,9 @@ def db_manager():
         def get_connection(self):
             return self.connection
 
-        def get_profesores(self):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM profesores WHERE activo = 1")
-            rows = cursor.fetchall()
-            return [Profesor(*row) for row in rows]
-
-        def get_profesor_by_id(self, profesor_id):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM profesores WHERE id = ?", (profesor_id,))
-            row = cursor.fetchone()
-            return Profesor(*row) if row else None
-
-        def insert_profesor(self, profesor):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO profesores (nombre, rfid, huella_id, face_id, activo, guardias_acumuladas, guardias_semana)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (profesor.nombre, profesor.rfid, profesor.huella_id, profesor.face_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana))
-            profesor.id = cursor.lastrowid
-            conn.commit()
-            return profesor
-
-        def update_profesor(self, profesor):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE profesores SET nombre=?, rfid=?, huella_id=?, face_id=?, activo=?, guardias_acumuladas=?, guardias_semana=?
-                WHERE id=?
-            """, (profesor.nombre, profesor.rfid, profesor.huella_id, profesor.face_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana, profesor.id))
-            conn.commit()
-
-        def delete_profesor(self, profesor_id):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE profesores SET activo=0 WHERE id=?", (profesor_id,))
-            conn.commit()
-
-        def get_horarios_by_dia(self, dia):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM horarios WHERE dia = ?", (dia,))
-            rows = cursor.fetchall()
-            return [Horario(*row) for row in rows]
-
-        def insert_horario(self, horario):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO horarios (profesor_id, dia, hora, aula, asignatura)
-                VALUES (?, ?, ?, ?, ?)
-            """, (horario.profesor_id, horario.dia, horario.hora, horario.aula, horario.asignatura))
-            horario.id = cursor.lastrowid
-            conn.commit()
-            return horario
-
-        def get_presencia_hoy(self, profesor_id):
-            from datetime import datetime
-            hoy = datetime.now().strftime("%Y-%m-%d")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT * FROM presencia
-                WHERE profesor_id = ? AND date(timestamp) = ?
-                ORDER BY timestamp DESC LIMIT 1
-            """, (profesor_id, hoy))
-            row = cursor.fetchone()
-            return Presencia(*row) if row else None
-
-        def get_presencias_hoy(self):
-            from datetime import datetime
-            hoy = datetime.now().strftime("%Y-%m-%d")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT * FROM presencia
-                WHERE date(timestamp) = ?
-                ORDER BY profesor_id, timestamp
-            """, (hoy,))
-            rows = cursor.fetchall()
-            return [Presencia(*row) for row in rows]
-
-        def insert_presencia(self, presencia):
-            timestamp = presencia.timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO presencia (profesor_id, timestamp, tipo)
-                VALUES (?, ?, ?)
-            """, (presencia.profesor_id, timestamp, presencia.tipo))
-            presencia.id = cursor.lastrowid
-            presencia.timestamp = timestamp
-            conn.commit()
-            return presencia
-
-        def get_ausencias_hoy(self):
-            from datetime import datetime
-            hoy = datetime.now().strftime("%Y-%m-%d")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM ausencias WHERE dia = ?", (hoy,))
-            rows = cursor.fetchall()
-            return [Ausencia(*row) for row in rows]
-
-        def get_ausencias_profesor_hoy(self, profesor_id, fecha=None):
-            from datetime import datetime
-            fecha = fecha or datetime.now().strftime("%Y-%m-%d")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM ausencias WHERE profesor_id = ? AND dia = ? ORDER BY hora", (profesor_id, fecha))
-            rows = cursor.fetchall()
-            return [Ausencia(*row) for row in rows]
-
-        def insert_ausencia(self, ausencia):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO ausencias (profesor_id, dia, hora, motivo)
-                VALUES (?, ?, ?, ?)
-            """, (ausencia.profesor_id, ausencia.dia, ausencia.hora, ausencia.motivo))
-            ausencia.id = cursor.lastrowid
-            conn.commit()
-            return ausencia
-
-        def delete_ausencias_profesor_hoy(self, profesor_id, fecha=None):
-            from datetime import datetime
-            fecha = fecha or datetime.now().strftime("%Y-%m-%d")
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM ausencias WHERE profesor_id = ? AND dia = ?", (profesor_id, fecha))
-            deleted = cursor.rowcount
-            conn.commit()
-            return deleted
-
-        def get_guardias_by_dia(self, dia):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM guardias WHERE dia = ?", (dia,))
-            rows = cursor.fetchall()
-            return [Guardia(*row) for row in rows]
-
-        def get_guardia_cubierta(self, dia, hora, aula):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT * FROM guardias
-                WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (dia, hora, aula),
-            )
-            row = cursor.fetchone()
-            return Guardia(*row) if row else None
-
-        def insert_guardia(self, guardia):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO guardias (dia, hora, aula, profesor_asignado, cubierta)
-                VALUES (?, ?, ?, ?, ?)
-            """, (guardia.dia, guardia.hora, guardia.aula, guardia.profesor_asignado, guardia.cubierta))
-            guardia.id = cursor.lastrowid
-            conn.commit()
-            return guardia
-
-        def update_guardia_cubierta(self, guardia_id, cubierta=1):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE guardias SET cubierta = ? WHERE id = ?", (cubierta, guardia_id))
-            conn.commit()
-
-        def guardia_ya_registrada(self, dia, hora, aula, profesor_asignado=None):
-            guardia = self.get_guardia_cubierta(dia, hora, aula)
-            if guardia is None:
-                return False
-            if profesor_asignado is None:
-                return True
-            return guardia.profesor_asignado == profesor_asignado
-
-        def registrar_guardia_realizada(self, dia, hora, aula, profesor_asignado):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id FROM guardias
-                WHERE dia = ? AND hora = ? AND aula = ? AND cubierta = 1
-                LIMIT 1
-                """,
-                (dia, hora, aula),
-            )
-            if cursor.fetchone():
-                return False
-
-            cursor.execute(
-                """
-                INSERT INTO guardias (dia, hora, aula, profesor_asignado, cubierta)
-                VALUES (?, ?, ?, ?, 1)
-                """,
-                (dia, hora, aula, profesor_asignado),
-            )
-            cursor.execute(
-                """
-                UPDATE profesores
-                SET guardias_acumuladas = guardias_acumuladas + 1,
-                    guardias_semana = guardias_semana + 1
-                WHERE id = ?
-                """,
-                (profesor_asignado,),
-            )
-            conn.commit()
-            return True
-
-        def actualizar_guardias_profesor(self, profesor_id):
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE profesores SET guardias_acumuladas = guardias_acumuladas + 1, guardias_semana = guardias_semana + 1 WHERE id = ?", (profesor_id,))
-            conn.commit()
-
-    manager = TestDBManager(conn)
+    manager = TestDBManager(NoCloseConnection(conn))
     yield manager
+    conn.close()
 
 
 def test_insert_and_get_profesor(db_manager):
@@ -452,6 +238,19 @@ def test_insert_and_get_ausencias_hoy(db_manager):
     ausencias = db_manager.get_ausencias_hoy()
     assert len(ausencias) >= 1
     assert ausencias[-1].motivo == "Enfermedad"
+
+
+def test_ensure_ausencia_no_duplica_registros(db_manager):
+    """ensure_ausencia debe devolver la misma ausencia si ya existe en profesor, día y hora."""
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Ensure Ausencia", rfid="141414141", activo=1))
+
+    primera = db_manager.ensure_ausencia(Ausencia(profesor_id=profesor.id, dia=hoy, hora=2, motivo="Automática"))
+    segunda = db_manager.ensure_ausencia(Ausencia(profesor_id=profesor.id, dia=hoy, hora=2, motivo="Automática"))
+    ausencias = db_manager.get_ausencias_profesor_hoy(profesor.id, hoy)
+
+    assert primera.id == segunda.id
+    assert len(ausencias) == 1
 
 
 def test_insert_and_get_guardias_by_dia(db_manager):

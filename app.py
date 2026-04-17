@@ -11,6 +11,7 @@ from modules.presencia.registro import registrar_presencia, obtener_estado_actua
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para flash messages
 app.config.setdefault("DB_PATH", "ies.db")
+app.config.setdefault("AUSENCIA_MINUTOS_GRACIA", 10)
 
 
 def _datos_guardias_vacios(fecha):
@@ -28,6 +29,10 @@ def _datos_guardias_vacios(fecha):
 
 def _obtener_db_path():
     return app.config.get("DB_PATH", "ies.db")
+
+
+def _obtener_ahora():
+    return datetime.now()
 
 
 def _obtener_nombre_profesor(db_manager, profesor_id):
@@ -81,12 +86,18 @@ def _agrupar_ranking_por_profesor(ranking_profesores):
     return ranking_agrupado
 
 
-def obtener_datos_guardias(db_path=None, dia=None):
-    fecha = dia or datetime.now().strftime("%Y-%m-%d")
+def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
+    ahora = ahora or _obtener_ahora()
+    fecha = dia or ahora.strftime("%Y-%m-%d")
     db_path = db_path or _obtener_db_path()
 
     try:
         motor = MotorGuardias(db_path=db_path)
+        if fecha == ahora.strftime("%Y-%m-%d"):
+            motor.detectar_ausencias_automaticas(
+                ahora=ahora,
+                margen_minutos=app.config.get("AUSENCIA_MINUTOS_GRACIA", 10),
+            )
         resultado = motor.calcular_guardias(dia=fecha)
         db_manager = motor.db_manager
     except (sqlite3.Error, ValueError):

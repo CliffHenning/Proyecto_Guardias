@@ -3,9 +3,17 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from config import describir_hora, describir_horas
-from modules.db.models import Profesor
-from modules.guardias.models import ProfesorDisponible
-from modules.guardias.reglas import calcular_ranking_profesores
+from modules.db.models import Profesor, Horario, Presencia, Ausencia
+from modules.guardias.models import Guardia, ProfesorDisponible
+from modules.guardias.reglas import determinar_profesores_disponibles, calcular_ranking_profesores, asignar_guardias
+
+
+class StubDbManager:
+    def __init__(self, horarios_by_dia=None):
+        self.horarios_by_dia = horarios_by_dia or {}
+
+    def get_horarios_by_dia(self, dia):
+        return self.horarios_by_dia.get(dia, [])
 
 
 def test_describir_hora_devuelve_tramo_real_del_centro():
@@ -15,6 +23,24 @@ def test_describir_hora_devuelve_tramo_real_del_centro():
 
 def test_describir_horas_agrupa_varias_horas_ordenadas():
     assert describir_horas([4, 1, 3]) == "1 (8:45-9:45), 3 (10:25-11:15), 4 (11:45-12:35)"
+
+
+def test_determinar_profesores_disponibles_calcula_carga_lectiva_y_devuelve_disponible():
+    profesor = Profesor(id=1, nombre="RFID Profesor", rfid="ABC123", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
+    ausencias = []
+
+    horarios = [Horario(profesor_id=1, dia="Lunes", hora=1, aula="A101", asignatura="Matemáticas")]
+    db_manager = StubDbManager(horarios_by_dia={"Lunes": horarios, "Martes": [], "Miércoles": [], "Jueves": [], "Viernes": []})
+
+    disponibles = determinar_profesores_disponibles([profesor], presencias, ausencias, 1, db_manager)
+
+    assert len(disponibles) == 1
+    disponible = disponibles[0]
+    assert disponible.profesor.id == 1
+    assert disponible.hora_disponible == 1
+    assert disponible.profesor.carga_lectiva == 1
+    assert disponible.profesor.rfid == "ABC123"
 
 
 def test_profesor_disponible_activo_y_hora_disponible():
@@ -79,6 +105,42 @@ def test_calcular_ranking_profesores_resuelve_empate_por_carga_lectiva():
     ranking = calcular_ranking_profesores([disp1, disp2])
 
     assert [item.profesor.id for item in ranking] == [2, 1]
+
+
+def test_asignar_guardias_solo_asigna_quien_esta_disponible_para_la_hora():
+    guardia = Guardia(dia="Lunes", hora=2, aula="A101", profesor_ausente_id=99)
+
+    prof1 = Profesor(id=1, nombre="Profesor A", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    prof2 = Profesor(id=2, nombre="Profesor B", activo=1, guardias_acumuladas=0, guardias_semana=0)
+
+    disp1 = ProfesorDisponible(prof1, hora_disponible=1)
+    disp2 = ProfesorDisponible(prof2, hora_disponible=2)
+
+    result_guardias = asignar_guardias([guardia], [disp1, disp2])
+
+    assert result_guardias[0].profesor_asignado == 2
+    assert prof1.guardias_semana == 0
+    assert prof1.guardias_acumuladas == 0
+    assert prof2.guardias_semana == 1
+    assert prof2.guardias_acumuladas == 1
+
+
+def test_asignar_guardias_asigna_mejor_profesor_segun_ranking():
+    guardia = Guardia(dia="Lunes", hora=1, aula="A101", profesor_ausente_id=99)
+
+    prof1 = Profesor(id=1, nombre="Profesor A", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    prof2 = Profesor(id=2, nombre="Profesor B", activo=1, guardias_acumuladas=0, guardias_semana=1)
+
+    disp1 = ProfesorDisponible(prof1, hora_disponible=1)
+    disp2 = ProfesorDisponible(prof2, hora_disponible=1)
+
+    result_guardias = asignar_guardias([guardia], [disp1, disp2])
+
+    assert result_guardias[0].profesor_asignado == 1
+    assert prof1.guardias_semana == 1
+    assert prof1.guardias_acumuladas == 1
+    assert prof2.guardias_semana == 1
+    assert prof2.guardias_acumuladas == 0
 
 
 def test_incrementar_contadores_guardia_actualiza_ambos_contadores():

@@ -163,6 +163,18 @@ class DBManager:
         conn.close()
         return [Ausencia(*row) for row in rows]
 
+    def get_ausencia_profesor_hora(self, profesor_id, fecha, hora):
+        """Obtiene la ausencia activa de un profesor para una hora concreta."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM ausencias WHERE profesor_id = ? AND dia = ? AND hora = ? LIMIT 1",
+            (profesor_id, fecha, hora),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return Ausencia(*row) if row else None
+
     def insert_ausencia(self, ausencia):
         """Inserta una nueva ausencia."""
         conn = self.get_connection()
@@ -175,6 +187,13 @@ class DBManager:
         conn.commit()
         conn.close()
         return ausencia
+
+    def ensure_ausencia(self, ausencia):
+        """Inserta una ausencia solo si todavía no existe para profesor, día y hora."""
+        existente = self.get_ausencia_profesor_hora(ausencia.profesor_id, ausencia.dia, ausencia.hora)
+        if existente is not None:
+            return existente
+        return self.insert_ausencia(ausencia)
 
     def delete_ausencias_profesor_hoy(self, profesor_id, fecha=None):
         """Elimina las ausencias activas de un profesor para el día indicado."""

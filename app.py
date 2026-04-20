@@ -115,11 +115,8 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
                 margen_minutos=app.config.get("AUSENCIA_MINUTOS_GRACIA", 10),
             )
         db_manager = motor.db_manager
-        if dia is None and not db_manager.get_ausencias_hoy(fecha):
-            ultima_fecha_con_ausencias = db_manager.get_ultima_fecha_con_ausencias()
-            if ultima_fecha_con_ausencias:
-                fecha = ultima_fecha_con_ausencias
         resultado = motor.calcular_guardias(dia=fecha)
+        guardias_persistidas = db_manager.get_guardias_by_dia(fecha)
         fechas_disponibles = db_manager.get_fechas_con_ausencias()
     except (sqlite3.Error, ValueError):
         return _datos_guardias_vacios(fecha)
@@ -129,20 +126,20 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
     ranking_profesores = _agrupar_ranking_por_profesor(resultado["ranking_profesores"])
 
     guardias = []
-    for guardia in resultado["guardias"]:
-        guardia_cubierta = db_manager.get_guardia_cubierta(guardia.dia, guardia.hora, guardia.aula)
-        guardia_registrada = guardia_cubierta is not None
-        profesor_asignado_id = guardia_cubierta.profesor_asignado if guardia_cubierta else None
+    for guardia in guardias_persistidas:
+        profesor_asignado_id = guardia.profesor_cubre_id
+        guardia_registrada = guardia.cubierta == 1
         guardias.append({
             "dia": guardia.dia,
             "hora": guardia.hora,
             "hora_texto": describir_hora(guardia.hora),
             "aula": guardia.aula,
             "asignatura": guardia.asignatura or "Sin asignatura",
+            "profesor_ausente_id": guardia.profesor_ausente_id,
             "profesor_asignado_id": profesor_asignado_id,
             "profesor_ausente": _obtener_nombre_profesor(db_manager, guardia.profesor_ausente_id),
             "profesor_asignado": _obtener_nombre_profesor(db_manager, profesor_asignado_id),
-            "estado": "Registrada" if guardia_registrada else "Pendiente",
+            "estado": "Registrada" if guardia_registrada else "Calculada",
             "registrada": guardia_registrada,
             "candidatos": candidatos_por_hora.get(guardia.hora, []),
         })
@@ -181,6 +178,8 @@ def registrar_guardia():
     dia = request.form.get("dia")
     hora = request.form.get("hora", type=int)
     aula = request.form.get("aula")
+    asignatura = request.form.get("asignatura")
+    profesor_ausente_id = request.form.get("profesor_ausente_id", type=int)
     profesor_asignado = request.form.get("profesor_asignado", type=int)
 
     if not dia or hora is None or not aula or profesor_asignado is None:
@@ -189,7 +188,14 @@ def registrar_guardia():
 
     try:
         db_manager = DBManager(db_path)
-        registrado = db_manager.registrar_guardia_realizada(dia, hora, aula, profesor_asignado)
+        registrado = db_manager.registrar_guardia_realizada(
+            dia,
+            hora,
+            aula,
+            profesor_asignado,
+            asignatura=asignatura,
+            profesor_ausente_id=profesor_ausente_id,
+        )
         if registrado:
             flash("Guardia registrada correctamente", "success")
         else:

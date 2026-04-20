@@ -1,5 +1,6 @@
 import sys
 import os
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -93,10 +94,11 @@ def test_ruta_guardias_pasa_datos_simulados(monkeypatch, cliente):
                 "hora_texto": "1 (8:45-9:45)",
                 "aula": "A101",
                 "asignatura": "Matemáticas",
-                "profesor_asignado_id": None,
+                "profesor_ausente_id": 9,
+                "profesor_asignado_id": 2,
                 "profesor_ausente": "Profesor Ausente",
-                "profesor_asignado": "Sin asignar",
-                "estado": "Pendiente",
+                "profesor_asignado": "Profesor Cobertura",
+                "estado": "Calculada",
                 "registrada": False,
                 "candidatos": [
                     {
@@ -117,7 +119,8 @@ def test_ruta_guardias_pasa_datos_simulados(monkeypatch, cliente):
     assert b"Profesor Ausente" in respuesta.data
     assert b"Profesor Cobertura" in respuesta.data
     assert b"A101" in respuesta.data
-    assert b"Pendiente" in respuesta.data
+    assert b"Calculada" in respuesta.data
+    assert b"Matem\xc3\xa1ticas" in respuesta.data
 
 
 def test_ruta_presencia_pasa_estado_al_template(monkeypatch, cliente):
@@ -131,3 +134,38 @@ def test_ruta_presencia_pasa_estado_al_template(monkeypatch, cliente):
 
     assert respuesta.status_code == 200
     assert b"Profesor Test" in respuesta.data
+
+
+def test_obtener_datos_guardias_no_retrocede_a_ultima_fecha_con_ausencias(monkeypatch):
+    class StubManager:
+        def get_ausencias_hoy(self, fecha=None):
+            return []
+
+        def get_guardias_by_dia(self, dia):
+            assert dia == "2026-04-20"
+            return []
+
+        def get_fechas_con_ausencias(self):
+            return ["2026-04-16"]
+
+        def get_profesor_by_id(self, profesor_id):
+            return None
+
+    class StubMotor:
+        def __init__(self, db_path=None):
+            self.db_manager = StubManager()
+
+        def detectar_ausencias_automaticas(self, ahora=None, margen_minutos=10):
+            return []
+
+        def calcular_guardias(self, dia=None):
+            assert dia == "2026-04-20"
+            return {"ranking_profesores": [], "guardias": []}
+
+    monkeypatch.setattr(app_module, "MotorGuardias", StubMotor)
+
+    datos = app_module.obtener_datos_guardias(dia=None, ahora=datetime.strptime("2026-04-20 09:00:00", "%Y-%m-%d %H:%M:%S"))
+
+    assert datos["fecha"] == "2026-04-20"
+    assert datos["fechas_disponibles"] == ["2026-04-16"]
+    assert datos["guardias"] == []

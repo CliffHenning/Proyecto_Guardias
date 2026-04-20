@@ -8,7 +8,7 @@ from modules.guardias.models import Guardia, ProfesorDisponible
 from modules.guardias.motor import MotorGuardias, obtener_dia_semana_es, obtener_hora_guardia_actual
 
 
-def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_automatica():
+def test_motor_guardias_integration_sugiere_profesor_para_la_guardia_calculada():
     motor = MotorGuardias(db_path=":memory:")
 
     profesores = [
@@ -19,6 +19,9 @@ def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_au
     ausencias = [Ausencia(profesor_id=99, dia="2026-04-09", hora=1, motivo="Enfermedad")]
 
     class StubManager:
+        def __init__(self):
+            self.guardias_reemplazadas = None
+
         def get_profesores(self):
             return profesores
 
@@ -29,7 +32,13 @@ def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_au
             return ausencias
 
         def get_horarios_by_dia(self, dia):
-            return [Horario(profesor_id=99, dia=dia, hora=1, aula="A101", asignatura="Matemáticas")]
+            return [
+                Horario(profesor_id=99, dia=dia, hora=1, aula="A101", asignatura="Matemáticas"),
+                Horario(profesor_id=1, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+            ]
+
+        def replace_guardias_calculadas(self, dia, guardias):
+            self.guardias_reemplazadas = (dia, guardias)
 
     motor.db_manager = StubManager()
 
@@ -39,11 +48,62 @@ def test_motor_guardias_integration_devuelve_guardia_y_ranking_sin_asignacion_au
     assert len(resultado["guardias"]) == 1
     guardia_asignada = resultado["guardias"][0]
     assert guardia_asignada.aula == "A101"
-    assert guardia_asignada.profesor_asignado is None
+    assert guardia_asignada.profesor_asignado == 1
+    assert motor.db_manager.guardias_reemplazadas[0] == "2026-04-09"
 
     ranking_ids = [item.profesor.id for item in resultado["ranking_profesores"]]
     assert ranking_ids == [1]
     assert ranking_ids[0] == 1
+
+
+def test_motor_guardias_no_reutiliza_el_mismo_profesor_en_dos_ausencias_simultaneas():
+    motor = MotorGuardias(db_path=":memory:")
+
+    profesores = [
+        Profesor(id=3, nombre="Profesor Guardia 1", activo=1, guardias_acumuladas=0, guardias_semana=0),
+        Profesor(id=4, nombre="Profesor Guardia 2", activo=1, guardias_acumuladas=1, guardias_semana=0),
+    ]
+    presencias = [
+        Presencia(profesor_id=3, timestamp="2026-04-09 08:00:00", tipo="entrada"),
+        Presencia(profesor_id=4, timestamp="2026-04-09 08:00:00", tipo="entrada"),
+    ]
+    ausencias = [
+        Ausencia(profesor_id=11, dia="2026-04-09", hora=1, motivo="Enfermedad"),
+        Ausencia(profesor_id=12, dia="2026-04-09", hora=1, motivo="Enfermedad"),
+    ]
+
+    class StubManager:
+        def __init__(self):
+            self.guardias_reemplazadas = None
+
+        def get_profesores(self):
+            return profesores
+
+        def get_presencias_hoy(self, dia=None):
+            return presencias
+
+        def get_ausencias_hoy(self, dia=None):
+            return ausencias
+
+        def get_horarios_by_dia(self, dia):
+            return [
+                Horario(profesor_id=11, dia=dia, hora=1, aula="A101", asignatura="Matemáticas"),
+                Horario(profesor_id=12, dia=dia, hora=1, aula="A102", asignatura="Lengua"),
+                Horario(profesor_id=3, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+                Horario(profesor_id=4, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+            ]
+
+        def replace_guardias_calculadas(self, dia, guardias):
+            self.guardias_reemplazadas = (dia, guardias)
+
+    motor.db_manager = StubManager()
+
+    resultado = motor.calcular_guardias(dia="2026-04-09")
+
+    asignados = [guardia.profesor_asignado for guardia in resultado["guardias"]]
+
+    assert asignados == [3, 4]
+    assert motor.db_manager.guardias_reemplazadas[0] == "2026-04-09"
 
 
 def test_obtener_dia_semana_es_no_depende_del_locale():
@@ -68,11 +128,12 @@ def test_motor_detecta_ausencias_automaticas_del_tramo_actual():
         def get_horarios_by_dia(self, dia):
             return [
                 Horario(profesor_id=10, dia=dia, hora=1, aula="A101", asignatura="Matemáticas"),
-                Horario(profesor_id=20, dia=dia, hora=1, aula="B201", asignatura="Lengua"),
+                Horario(profesor_id=20, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+                Horario(profesor_id=30, dia=dia, hora=1, aula="B201", asignatura="Lengua"),
             ]
 
         def get_presencias_hoy(self, fecha=None):
-            return [Presencia(profesor_id=20, timestamp=f"{fecha} 08:00:00", tipo="entrada")]
+            return [Presencia(profesor_id=30, timestamp=f"{fecha} 08:00:00", tipo="entrada")]
 
         def ensure_ausencia(self, ausencia):
             clave = (ausencia.profesor_id, ausencia.dia, ausencia.hora)
@@ -89,6 +150,39 @@ def test_motor_detecta_ausencias_automaticas_del_tramo_actual():
     assert ausencias[0].profesor_id == 10
     assert ausencias[0].hora == 1
     assert ausencias[0].motivo == "Ausencia detectada automáticamente"
+
+
+def test_motor_ignora_ausencias_sobre_tramos_de_guardia():
+    motor = MotorGuardias(db_path=":memory:")
+
+    profesores = [
+        Profesor(id=1, nombre="Profesor Guardia", activo=1, guardias_acumuladas=0, guardias_semana=0),
+        Profesor(id=2, nombre="Profesor Cobertura", activo=1, guardias_acumuladas=0, guardias_semana=0),
+    ]
+    presencias = [Presencia(profesor_id=2, timestamp="2026-04-16 08:00:00", tipo="entrada")]
+    ausencias = [Ausencia(profesor_id=1, dia="2026-04-16", hora=1, motivo="Sin fichaje")]
+
+    class StubManager:
+        def get_profesores(self):
+            return profesores
+
+        def get_presencias_hoy(self, dia=None):
+            return presencias
+
+        def get_ausencias_hoy(self, dia=None):
+            return ausencias
+
+        def get_horarios_by_dia(self, dia):
+            return [
+                Horario(profesor_id=1, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+                Horario(profesor_id=2, dia=dia, hora=1, aula="Guardia", asignatura="Guardia"),
+            ]
+
+    motor.db_manager = StubManager()
+
+    resultado = motor.calcular_guardias(dia="2026-04-16")
+
+    assert resultado["guardias"] == []
 
 
 # --- Pruebas de modelos de dominio (1.1.5.4) ---

@@ -45,12 +45,13 @@ def db_manager():
 
 def test_insert_and_get_profesor(db_manager):
     """Prueba la inserción y recuperación de un profesor."""
-    profesor = Profesor(nombre="Juan Pérez", rfid="123456789", activo=1)
+    profesor = Profesor(nombre="Juan Pérez", departamento="Matemáticas", rfid="123456789", activo=1)
     inserted = db_manager.insert_profesor(profesor)
     assert inserted.id is not None
 
     retrieved = db_manager.get_profesor_by_id(inserted.id)
     assert retrieved.nombre == "Juan Pérez"
+    assert retrieved.departamento == "Matemáticas"
     assert retrieved.rfid == "123456789"
     assert retrieved.activo == 1
 
@@ -101,7 +102,7 @@ def test_registrar_guardia_realizada_actualiza_contadores_y_persistencia(db_mana
     """Registrar una guardia debe incrementar contadores y dejar traza en la tabla guardias."""
     profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Guardia", rfid="RG1", activo=1))
 
-    registrado = db_manager.registrar_guardia_realizada("Lunes", 2, "A101", profesor.id)
+    registrado = db_manager.registrar_guardia_realizada("Lunes", 2, "A101", profesor.id, asignatura="Guardia", profesor_ausente_id=9)
 
     actualizado = db_manager.get_profesor_by_id(profesor.id)
     guardias = db_manager.get_guardias_by_dia("Lunes")
@@ -112,6 +113,9 @@ def test_registrar_guardia_realizada_actualiza_contadores_y_persistencia(db_mana
     assert len(guardias) == 1
     assert guardias[0].hora == 2
     assert guardias[0].aula == "A101"
+    assert guardias[0].asignatura == "Guardia"
+    assert guardias[0].profesor_ausente_id == 9
+    assert guardias[0].profesor_cubre_id == profesor.id
     assert guardias[0].profesor_asignado == profesor.id
     assert guardias[0].cubierta == 1
 
@@ -120,8 +124,8 @@ def test_registrar_guardia_realizada_no_duplica_contadores(db_manager):
     """Una guardia ya registrada no debe incrementar de nuevo los contadores."""
     profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Unico", rfid="RU1", activo=1))
 
-    primer_registro = db_manager.registrar_guardia_realizada("Martes", 3, "B202", profesor.id)
-    segundo_registro = db_manager.registrar_guardia_realizada("Martes", 3, "B202", profesor.id)
+    primer_registro = db_manager.registrar_guardia_realizada("Martes", 3, "B202", profesor.id, asignatura="Guardia", profesor_ausente_id=8)
+    segundo_registro = db_manager.registrar_guardia_realizada("Martes", 3, "B202", profesor.id, asignatura="Guardia", profesor_ausente_id=8)
 
     actualizado = db_manager.get_profesor_by_id(profesor.id)
     guardias = db_manager.get_guardias_by_dia("Martes")
@@ -155,11 +159,13 @@ def test_delete_ausencias_profesor_hoy_elimina_ausencias_activas(db_manager):
 def test_get_guardia_cubierta_devuelve_la_guardia_registrada(db_manager):
     """Debe poder recuperarse la guardia cubierta de un tramo concreto."""
     profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Cobertura", rfid="RC1", activo=1))
-    db_manager.registrar_guardia_realizada("Jueves", 1, "A101", profesor.id)
+    db_manager.registrar_guardia_realizada("Jueves", 1, "A101", profesor.id, asignatura="Guardia", profesor_ausente_id=3)
 
-    guardia = db_manager.get_guardia_cubierta("Jueves", 1, "A101")
+    guardia = db_manager.get_guardia_cubierta("Jueves", 1, "A101", profesor_ausente_id=3)
 
     assert guardia is not None
+    assert guardia.asignatura == "Guardia"
+    assert guardia.profesor_ausente_id == 3
     assert guardia.profesor_asignado == profesor.id
 
 
@@ -169,12 +175,13 @@ def test_insert_and_get_horarios_by_dia(db_manager):
     profesor = Profesor(nombre="Test Profesor", rfid="666666666", activo=1)
     prof_inserted = db_manager.insert_profesor(profesor)
 
-    horario = Horario(profesor_id=prof_inserted.id, dia="Lunes", hora=1, aula="A101", asignatura="Matemáticas")
+    horario = Horario(profesor_id=prof_inserted.id, dia="Lunes", hora=1, tipo="clase", aula="A101", asignatura="Matemáticas")
     inserted = db_manager.insert_horario(horario)
     assert inserted.id is not None
 
     horarios = db_manager.get_horarios_by_dia("Lunes")
     assert len(horarios) == 1
+    assert horarios[0].tipo == "clase"
     assert horarios[0].asignatura == "Matemáticas"
 
 
@@ -259,13 +266,16 @@ def test_insert_and_get_guardias_by_dia(db_manager):
     profesor = Profesor(nombre="Test Guardia", rfid="000000000", activo=1)
     prof_inserted = db_manager.insert_profesor(profesor)
 
-    guardia = Guardia(dia="Martes", hora=3, aula="B202", profesor_asignado=prof_inserted.id, cubierta=0)
+    guardia = Guardia(dia="Martes", hora=3, aula="B202", asignatura="Guardia", profesor_ausente_id=15, profesor_cubre_id=prof_inserted.id, cubierta=0)
     inserted = db_manager.insert_guardia(guardia)
     assert inserted.id is not None
 
     guardias = db_manager.get_guardias_by_dia("Martes")
     assert len(guardias) >= 1
     assert guardias[-1].aula == "B202"
+    assert guardias[-1].asignatura == "Guardia"
+    assert guardias[-1].profesor_ausente_id == 15
+    assert guardias[-1].profesor_cubre_id == prof_inserted.id
 
 
 def test_update_guardia_cubierta(db_manager):
@@ -274,7 +284,7 @@ def test_update_guardia_cubierta(db_manager):
     profesor = Profesor(nombre="Test Update Guardia", rfid="121212121", activo=1)
     prof_inserted = db_manager.insert_profesor(profesor)
 
-    guardia = Guardia(dia="Miércoles", hora=4, aula="C303", profesor_asignado=prof_inserted.id, cubierta=0)
+    guardia = Guardia(dia="Miércoles", hora=4, aula="C303", asignatura="Guardia", profesor_ausente_id=22, profesor_cubre_id=prof_inserted.id, cubierta=0)
     inserted = db_manager.insert_guardia(guardia)
 
     db_manager.update_guardia_cubierta(inserted.id, cubierta=1)
@@ -282,6 +292,22 @@ def test_update_guardia_cubierta(db_manager):
     guardias = db_manager.get_guardias_by_dia("Miércoles")
     updated_guardia = next((g for g in guardias if g.id == inserted.id), None)
     assert updated_guardia.cubierta == 1
+
+
+def test_replace_guardias_calculadas_persiste_resultado_del_calculo(db_manager):
+    guardias = [
+        Guardia(dia="2026-04-16", hora=1, aula="A101", asignatura="Matemáticas", profesor_ausente_id=1, profesor_cubre_id=3, cubierta=0),
+        Guardia(dia="2026-04-16", hora=2, aula="A102", asignatura="Lengua", profesor_ausente_id=2, profesor_cubre_id=4, cubierta=0),
+    ]
+
+    db_manager.replace_guardias_calculadas("2026-04-16", guardias)
+
+    persistidas = db_manager.get_guardias_by_dia("2026-04-16")
+
+    assert len(persistidas) == 2
+    assert persistidas[0].profesor_ausente_id == 1
+    assert persistidas[0].profesor_cubre_id == 3
+    assert persistidas[0].cubierta == 0
 
 
 def test_actualizar_guardias_profesor(db_manager):

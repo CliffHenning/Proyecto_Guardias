@@ -44,6 +44,10 @@ La aplicación estará disponible en `http://127.0.0.1:5000`.
 | `/presencia` | Registro de presencia del profesorado |
 | `/guardias` | Visualización del cálculo de guardias |
 
+## Horarios con guardia
+
+En la tabla `horarios`, los tramos de guardia se representan con la asignatura `Guardia`. Esos tramos cuentan como disponibilidad para cubrir ausencias, pero no como carga lectiva ordinaria.
+
 ## Variable de entorno
 
 El método de identificación del profesorado se controla mediante la variable de entorno `METODO_PRESENCIA`:

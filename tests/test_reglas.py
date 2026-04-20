@@ -25,15 +25,18 @@ def test_describir_horas_agrupa_varias_horas_ordenadas():
     assert describir_horas([4, 1, 3]) == "1 (8:45-9:45), 3 (10:25-11:15), 4 (11:45-12:35)"
 
 
-def test_determinar_profesores_disponibles_calcula_carga_lectiva_y_devuelve_disponible():
+def test_determinar_profesores_disponibles_requiere_tramo_de_guardia_y_excluye_guardia_de_la_carga():
     profesor = Profesor(id=1, nombre="RFID Profesor", rfid="ABC123", activo=1, guardias_acumuladas=0, guardias_semana=0)
     presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
     ausencias = []
 
-    horarios = [Horario(profesor_id=1, dia="Lunes", hora=1, aula="A101", asignatura="Matemáticas")]
+    horarios = [
+        Horario(profesor_id=1, dia="Lunes", hora=1, aula="Guardia", asignatura="Guardia"),
+        Horario(profesor_id=1, dia="Lunes", hora=2, aula="A101", asignatura="Matemáticas"),
+    ]
     db_manager = StubDbManager(horarios_by_dia={"Lunes": horarios, "Martes": [], "Miércoles": [], "Jueves": [], "Viernes": []})
 
-    disponibles = determinar_profesores_disponibles([profesor], presencias, ausencias, 1, db_manager)
+    disponibles = determinar_profesores_disponibles([profesor], presencias, ausencias, 1, db_manager, dia_semana="Lunes")
 
     assert len(disponibles) == 1
     disponible = disponibles[0]
@@ -41,6 +44,19 @@ def test_determinar_profesores_disponibles_calcula_carga_lectiva_y_devuelve_disp
     assert disponible.hora_disponible == 1
     assert disponible.profesor.carga_lectiva == 1
     assert disponible.profesor.rfid == "ABC123"
+
+
+def test_determinar_profesores_disponibles_no_usa_huecos_sin_guardia():
+    profesor = Profesor(id=1, nombre="RFID Profesor", rfid="ABC123", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
+    ausencias = []
+
+    horarios = [Horario(profesor_id=1, dia="Lunes", hora=2, aula="A101", asignatura="Matemáticas")]
+    db_manager = StubDbManager(horarios_by_dia={"Lunes": horarios, "Martes": [], "Miércoles": [], "Jueves": [], "Viernes": []})
+
+    disponibles = determinar_profesores_disponibles([profesor], presencias, ausencias, 1, db_manager, dia_semana="Lunes")
+
+    assert disponibles == []
 
 
 def test_profesor_disponible_activo_y_hora_disponible():

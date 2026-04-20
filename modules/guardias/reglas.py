@@ -28,19 +28,20 @@ def determinar_profesores_disponibles(profesores, presencias, ausencias, hora, d
     Returns:
         list: Lista de objetos ProfesorDisponible con carga_lectiva calculada
     """
+    horarios_dia = db_manager.get_horarios_by_dia(dia_semana) if dia_semana else []
     disponibles = []
     for profesor in profesores:
         ausente_hora = any(a.profesor_id == profesor.id and a.hora == hora for a in ausencias)
         if ausente_hora:
             continue
 
-        horarios_dia = db_manager.get_horarios_by_dia(dia_semana) if dia_semana else []
-        tiene_clase_hora = any(
-            horario.profesor_id == profesor.id and horario.hora == hora
-            for horario in horarios_dia
-        )
-        if tiene_clase_hora:
-            continue
+        if dia_semana:
+            tiene_guardia_hora = any(
+                horario.profesor_id == profesor.id and horario.hora == hora and horario.es_guardia()
+                for horario in horarios_dia
+            )
+            if not tiene_guardia_hora:
+                continue
 
         presencias_profesor = sorted([p for p in presencias if p.profesor_id == profesor.id], key=lambda p: p.timestamp)
         if presencias_profesor and presencias_profesor[-1].tipo == 'entrada':
@@ -66,7 +67,7 @@ def calcular_carga_lectiva(profesor_id, db_manager):
     carga = 0
     for dia in dias:
         horarios = db_manager.get_horarios_by_dia(dia)
-        carga += len([h for h in horarios if h.profesor_id == profesor_id])
+        carga += len([h for h in horarios if h.profesor_id == profesor_id and h.es_clase_lectiva()])
     return carga
 
 

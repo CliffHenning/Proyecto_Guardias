@@ -4,6 +4,7 @@
 CREATE TABLE profesores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
+    departamento TEXT,
     rfid TEXT,
     huella_id TEXT,
     face_id TEXT,
@@ -21,6 +22,7 @@ CREATE TABLE horarios (
     profesor_id INTEGER,
     dia TEXT,
     hora INTEGER,
+    tipo TEXT DEFAULT 'clase',
     aula TEXT,
     asignatura TEXT,
     FOREIGN KEY (profesor_id) REFERENCES profesores(id)
@@ -60,7 +62,10 @@ CREATE TABLE guardias (
     dia TEXT,
     hora INTEGER,
     aula TEXT,
-    profesor_asignado INTEGER,
+    asignatura TEXT,
+    id_profesor_ausente INTEGER,
+    id_profesor_cubre INTEGER,
     cubierta INTEGER DEFAULT 0,
-    FOREIGN KEY (profesor_asignado) REFERENCES profesores(id)
+    FOREIGN KEY (id_profesor_ausente) REFERENCES profesores(id),
+    FOREIGN KEY (id_profesor_cubre) REFERENCES profesores(id)
 );

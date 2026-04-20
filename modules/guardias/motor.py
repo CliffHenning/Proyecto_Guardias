@@ -60,6 +60,24 @@ def obtener_dia_semana_es(fecha):
     return DIAS_SEMANA_ES[fecha.weekday()]
 
 
+def _asignar_sugerencias_por_hora(guardias, ranking_profesores):
+    """Asigna una sugerencia de cobertura sin marcar la guardia como registrada."""
+    profesores_ya_usados = set()
+    for guardia in guardias:
+        sugerido = next(
+            (
+                profesor_disp for profesor_disp in ranking_profesores
+                if profesor_disp.profesor.id not in profesores_ya_usados
+                and profesor_disp.puede_hacer_guardia(guardia.hora)
+            ),
+            None,
+        )
+        if sugerido is None:
+            continue
+        guardia.asignar_profesor(sugerido.profesor.id)
+        profesores_ya_usados.add(sugerido.profesor.id)
+
+
 class MotorGuardias:
     """
     Motor responsable de calcular las guardias para un día determinado.
@@ -81,7 +99,10 @@ class MotorGuardias:
         fecha = ahora.strftime("%Y-%m-%d")
         dia_semana = obtener_dia_semana_es(ahora)
         horarios = self.db_manager.get_horarios_by_dia(dia_semana)
-        horarios_hora_actual = [horario for horario in horarios if horario.hora == hora_actual]
+        horarios_hora_actual = [
+            horario for horario in horarios
+            if horario.hora == hora_actual and horario.es_clase_lectiva()
+        ]
         if not horarios_hora_actual:
             return []
 
@@ -134,6 +155,8 @@ class MotorGuardias:
             dia_semana = obtener_dia_semana_es(fecha)
             horarios_profesor = self.db_manager.get_horarios_by_dia(dia_semana)
             horario_ausente = next((h for h in horarios_profesor if h.profesor_id == ausencia.profesor_id and h.hora == ausencia.hora), None)
+            if horario_ausente is not None and horario_ausente.es_guardia():
+                continue
             guardia = Guardia(
                 ausencia.dia,
                 ausencia.hora,
@@ -143,10 +166,11 @@ class MotorGuardias:
             )
             guardias.append(guardia)
 
-        horas_con_guardias = set(g.hora for g in guardias)
+        horas_con_guardias = sorted(set(g.hora for g in guardias))
         profesores_disponibles_global = set()
 
         for hora in horas_con_guardias:
+            guardias_hora = [guardia for guardia in guardias if guardia.hora == hora]
             fecha_guardia = next(g.dia for g in guardias if g.hora == hora)
             dia_semana = obtener_dia_semana_es(datetime.strptime(fecha_guardia, "%Y-%m-%d"))
             profesores_disponibles_hora = determinar_profesores_disponibles(
@@ -157,9 +181,14 @@ class MotorGuardias:
                 self.db_manager,
                 dia_semana=dia_semana,
             )
+            ranking_hora = calcular_ranking_profesores(list(profesores_disponibles_hora))
+            _asignar_sugerencias_por_hora(guardias_hora, ranking_hora)
             profesores_disponibles_global.update(profesores_disponibles_hora)
 
         ranking_profesores = calcular_ranking_profesores(list(profesores_disponibles_global))
+
+        if hasattr(self.db_manager, "replace_guardias_calculadas"):
+            self.db_manager.replace_guardias_calculadas(dia, guardias)
 
         return {
             'ranking_profesores': ranking_profesores,

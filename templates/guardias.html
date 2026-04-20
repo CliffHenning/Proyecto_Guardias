@@ -119,7 +119,7 @@
                                 <th>Guardias acumuladas</th>
                                 <th>Guardias semana</th>
                                 <th>Carga lectiva</th>
-                                <th>Horas disponibles</th>
+                                <th>Horas de guardia</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -176,9 +176,11 @@
                                         <input type="hidden" name="dia" value="{{ guardia.dia }}">
                                         <input type="hidden" name="hora" value="{{ guardia.hora }}">
                                         <input type="hidden" name="aula" value="{{ guardia.aula }}">
+                                        <input type="hidden" name="asignatura" value="{{ guardia.asignatura }}">
+                                        <input type="hidden" name="profesor_ausente_id" value="{{ guardia.profesor_ausente_id }}">
                                         <select name="profesor_asignado" class="form-select form-select-sm" aria-label="Seleccionar profesor para la guardia">
                                             {% for candidato in guardia.candidatos %}
-                                            <option value="{{ candidato.id }}">{{ candidato.nombre }}</option>
+                                            <option value="{{ candidato.id }}" {% if candidato.id == guardia.profesor_asignado_id %}selected{% endif %}>{{ candidato.nombre }}</option>
                                             {% endfor %}
                                         </select>
                                         <button type="submit" class="btn btn-sm btn-outline-primary">Registrar guardia</button>

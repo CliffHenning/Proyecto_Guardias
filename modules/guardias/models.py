@@ -24,6 +24,14 @@ class Guardia:
         self.profesor_asignado = None
         self.prioridad = 0
 
+    @property
+    def profesor_cubre_id(self):
+        return self.profesor_asignado
+
+    @profesor_cubre_id.setter
+    def profesor_cubre_id(self, value):
+        self.profesor_asignado = value
+
     def asignar_profesor(self, profesor_id):
         """Asigna un profesor a esta guardia."""
         self.profesor_asignado = profesor_id

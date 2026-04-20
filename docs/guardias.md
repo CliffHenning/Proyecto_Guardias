@@ -4,9 +4,12 @@ El módulo de guardias calcula cobertura de ausencias según reglas de prioridad
 
 ## Flujo general
 
-1. Detectar profesores disponibles
-2. Aplicar ranking por criterios de prioridad
-3. Mostrar las aulas a cubrir y permitir la selección manual del profesor que realizará la guardia
+1. Detectar profesores ausentes
+2. Ver qué clases quedan descubiertas
+3. Buscar profesores disponibles con `Guardia` en esa misma hora
+4. Aplicar ranking por criterios de prioridad
+5. Insertar el resultado calculado en la tabla `guardias`
+6. Mostrar las aulas a cubrir y permitir la confirmación manual del profesor que realizará la guardia
 
 ## Criterios del ranking
 
@@ -48,12 +51,20 @@ Para facilitar la depuración, si una ausencia no tiene horario detallado cargad
 
 ## Registro de guardia realizada
 
-Desde la vista de guardias se muestra cada aula pendiente junto con un desplegable de profesores disponibles para esa hora, ordenados por prioridad.
+Desde la vista de guardias se muestra cada aula calculada junto con un desplegable de profesores disponibles para esa hora, ordenados por prioridad.
+
+Antes del registro manual, el motor ya propone un profesor para cada ausencia cruzando:
+
+1. Las ausencias activas de esa hora
+2. Los profesores que tienen `Guardia` en esa misma hora
+3. El ranking de prioridad para evitar reutilizar al mismo profesor en dos aulas simultáneas
+
+Ese resultado se persiste en `guardias` con `cubierta = 0`, `id_profesor_ausente` e `id_profesor_cubre`.
 
 Al pulsar el boton de registro:
 
 1. Se toma el profesor seleccionado manualmente en la interfaz
-2. Se almacena la guardia en la tabla `guardias` como cubierta
+2. Se almacena la guardia en la tabla `guardias` como cubierta, incluyendo el aula y la asignatura mostradas en la vista
 3. Se incrementan los contadores `guardias_acumuladas` y `guardias_semana` del profesor elegido
 4. La vista se recarga mostrando el estado de la guardia como registrada
 

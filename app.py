@@ -127,8 +127,8 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
 
     guardias = []
     for guardia in guardias_persistidas:
-        profesor_asignado_id = guardia.profesor_cubre_id
         guardia_registrada = guardia.cubierta == 1
+        profesor_asignado_id = guardia.profesor_cubre_id if guardia_registrada else None
         guardias.append({
             "dia": guardia.dia,
             "hora": guardia.hora,

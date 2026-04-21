@@ -6,5 +6,5 @@ Guía base de despliegue en Raspberry Pi.
 
 - Usar Python 3.9+
 - Instalar dependencias del proyecto
-- Habilitar SPI para lector RFID si aplica
+- Configurar el puerto serie del lector de huella si aplica
 - Configurar servicio para arranque automático

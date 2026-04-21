@@ -1,18 +1,12 @@
 import os
-from modules.presencia.rfid_service import identificar_rfid
 from modules.presencia.huella_service import identificar_huella
-#from modules.presencia.facial_service import identificar_facial
 from modules.db.db_manager import DBManager
 from modules.db.models import Presencia
 
 def identificar_profesor():
-    metodo = os.getenv("METODO_PRESENCIA", "rfid")
-    if metodo == "rfid":
-        return identificar_rfid()
-    elif metodo == "huella":
+    metodo = os.getenv("METODO_PRESENCIA", "huella")
+    if metodo == "huella":
         return identificar_huella()
-    #elif metodo == "facial":
-    #    return identificar_facial()
     else:
         raise ValueError(f"Método de presencia desconocido: {metodo}")
 

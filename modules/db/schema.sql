@@ -1,13 +1,11 @@
 -- =========================
 -- TABLA: profesores
 -- =========================
-CREATE TABLE profesores (
+CREATE TABLE IF NOT EXISTS profesores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     departamento TEXT,
-    rfid TEXT,
     huella_id TEXT,
-    face_id TEXT,
     activo INTEGER DEFAULT 1,
     guardias_acumuladas INTEGER DEFAULT 0,
     guardias_semana INTEGER DEFAULT 0
@@ -17,7 +15,7 @@ CREATE TABLE profesores (
 -- TABLA: horarios
 -- (qué profesor tiene clase y cuándo)
 -- =========================
-CREATE TABLE horarios (
+CREATE TABLE IF NOT EXISTS horarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profesor_id INTEGER,
     dia TEXT,
@@ -32,7 +30,7 @@ CREATE TABLE horarios (
 -- TABLA: presencia
 -- (registros de entrada/salida)
 -- =========================
-CREATE TABLE presencia (
+CREATE TABLE IF NOT EXISTS presencia (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profesor_id INTEGER,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -44,7 +42,7 @@ CREATE TABLE presencia (
 -- TABLA: ausencias
 -- (detectadas automáticamente o manuales)
 -- =========================
-CREATE TABLE ausencias (
+CREATE TABLE IF NOT EXISTS ausencias (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profesor_id INTEGER,
     dia TEXT,
@@ -57,7 +55,7 @@ CREATE TABLE ausencias (
 -- TABLA: guardias
 -- (resultado del cálculo)
 -- =========================
-CREATE TABLE guardias (
+CREATE TABLE IF NOT EXISTS guardias (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dia TEXT,
     hora INTEGER,

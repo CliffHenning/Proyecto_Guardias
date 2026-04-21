@@ -179,8 +179,9 @@
                                         <input type="hidden" name="asignatura" value="{{ guardia.asignatura }}">
                                         <input type="hidden" name="profesor_ausente_id" value="{{ guardia.profesor_ausente_id }}">
                                         <select name="profesor_asignado" class="form-select form-select-sm" aria-label="Seleccionar profesor para la guardia">
+                                            <option value="" selected disabled>Seleccionar profesor</option>
                                             {% for candidato in guardia.candidatos %}
-                                            <option value="{{ candidato.id }}" {% if candidato.id == guardia.profesor_asignado_id %}selected{% endif %}>{{ candidato.nombre }}</option>
+                                            <option value="{{ candidato.id }}">{{ candidato.nombre }}</option>
                                             {% endfor %}
                                         </select>
                                         <button type="submit" class="btn btn-sm btn-outline-primary">Registrar guardia</button>

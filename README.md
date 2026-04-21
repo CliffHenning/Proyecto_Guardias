@@ -1,6 +1,6 @@
 # Sistema de Gestión de Guardias
 
-Aplicación web Flask para la gestión automática de guardias escolares con identificación por RFID.
+Aplicación web Flask para la gestión automática de guardias escolares con identificación por huella dactilar.
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green)](https://flask.palletsprojects.com/)
@@ -53,11 +53,11 @@ En la tabla `horarios`, los tramos de guardia se representan con la asignatura `
 El método de identificación del profesorado se controla mediante la variable de entorno `METODO_PRESENCIA`:
 
 ```bash
-# Modo RFID (por defecto, requiere hardware en Raspberry Pi)
-$env:METODO_PRESENCIA = "rfid"
+# Modo huella (por defecto)
+$env:METODO_PRESENCIA = "huella"
 ```
 
-Si no se define, el sistema usa `rfid` como valor predeterminado.
+Si no se define, el sistema usa `huella` como valor predeterminado.
 
 ## Ejecutar los tests
 
@@ -102,7 +102,7 @@ proyecto_guardias/
 ├── modules/
 │   ├── db/                 # Base de datos SQLite (DBManager, modelos, esquema)
 │   ├── guardias/           # Motor de cálculo de guardias y reglas de negocio
-│   └── presencia/          # Identificación del profesorado (RFID)
+│   └── presencia/          # Identificación del profesorado (huella)
 ├── templates/              # Plantillas HTML
 ├── static/                 # Archivos estáticos
 ├── docs/                   # Fuente de la documentación MkDocs
@@ -111,4 +111,4 @@ proyecto_guardias/
 
 ## Notas sobre hardware
 
-El módulo RFID (`mfrc522`) solo funciona en Raspberry Pi. En entornos de desarrollo Windows el sistema opera igualmente; los tests cubren todas las rutas sin necesidad de hardware físico.
+El lector de huella utiliza comunicación serie y puede simularse en desarrollo introduciendo manualmente el identificador de huella. Los tests cubren las rutas principales sin necesidad de hardware físico.

@@ -6,13 +6,11 @@ def _normalizar_asignatura(valor):
 
 
 class Profesor:
-    def __init__(self, id=None, nombre=None, departamento=None, rfid=None, huella_id=None, face_id=None, activo=1, guardias_acumuladas=0, guardias_semana=0):
+    def __init__(self, id=None, nombre=None, departamento=None, huella_id=None, activo=1, guardias_acumuladas=0, guardias_semana=0):
         self.id = id
         self.nombre = nombre
         self.departamento = departamento
-        self.rfid = rfid
         self.huella_id = huella_id
-        self.face_id = face_id
         self.activo = activo
         self.guardias_acumuladas = guardias_acumuladas
         self.guardias_semana = guardias_semana

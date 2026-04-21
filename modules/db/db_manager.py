@@ -19,6 +19,8 @@ class DBManager:
         columnas = {row[1] for row in cursor.fetchall()}
         if "departamento" not in columnas:
             cursor.execute("ALTER TABLE profesores ADD COLUMN departamento TEXT")
+        if "huella_id" not in columnas:
+            cursor.execute("ALTER TABLE profesores ADD COLUMN huella_id TEXT")
             conn.commit()
 
     def _ensure_horarios_schema(self, conn):
@@ -74,7 +76,7 @@ class DBManager:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, nombre, departamento, rfid, huella_id, face_id, activo, guardias_acumuladas, guardias_semana
+            SELECT id, nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana
             FROM profesores WHERE activo = 1
             """
         )
@@ -89,7 +91,7 @@ class DBManager:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, nombre, departamento, rfid, huella_id, face_id, activo, guardias_acumuladas, guardias_semana
+            SELECT id, nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana
             FROM profesores WHERE id = ?
             """,
             (profesor_id,),
@@ -104,9 +106,9 @@ class DBManager:
         self._ensure_schema(conn)
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO profesores (nombre, departamento, rfid, huella_id, face_id, activo, guardias_acumuladas, guardias_semana)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (profesor.nombre, profesor.departamento, profesor.rfid, profesor.huella_id, profesor.face_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana))
+            INSERT INTO profesores (nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (profesor.nombre, profesor.departamento, profesor.huella_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana))
         profesor.id = cursor.lastrowid
         conn.commit()
         conn.close()
@@ -118,9 +120,9 @@ class DBManager:
         self._ensure_schema(conn)
         cursor = conn.cursor()
         cursor.execute("""
-            UPDATE profesores SET nombre=?, departamento=?, rfid=?, huella_id=?, face_id=?, activo=?, guardias_acumuladas=?, guardias_semana=?
+            UPDATE profesores SET nombre=?, departamento=?, huella_id=?, activo=?, guardias_acumuladas=?, guardias_semana=?
             WHERE id=?
-        """, (profesor.nombre, profesor.departamento, profesor.rfid, profesor.huella_id, profesor.face_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana, profesor.id))
+        """, (profesor.nombre, profesor.departamento, profesor.huella_id, profesor.activo, profesor.guardias_acumuladas, profesor.guardias_semana, profesor.id))
         conn.commit()
         conn.close()
 

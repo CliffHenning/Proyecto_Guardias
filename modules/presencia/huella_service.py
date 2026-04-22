@@ -89,23 +89,6 @@ def _parsear_respuesta_identificacion(datos):
         if str(datos.get("result", "")).strip().lower() in {"no data", "no_data", "waiting"}:
             return None, "NO_DATA"
 
-        # Algunos servidores devuelven en "result" una traza como:
-        # "Matched!\n<R>PASS_0</R>\n<S>DS=7E</S>"
-        resultado_texto = str(datos.get("result", "")).strip()
-        if resultado_texto:
-            resultado_upper = resultado_texto.upper()
-            if "PASS" in resultado_upper:
-                import re
-
-                # Soporta PASS_0, PASS:0, PASS 0, <R>PASS_0</R>
-                match = re.search(r"PASS[_:\s|]*(\d+)", resultado_upper)
-                if match:
-                    return int(match.group(1)), None
-                # PASS sin ID numérico explícito
-                return None, "El servidor devolvio PASS, pero sin ID de huella."
-            if "FAIL" in resultado_upper:
-                return None, "FAIL"
-
         if datos.get("ok") and ("huella_id" in datos or "id" in datos or "fingerprint_id" in datos):
             huella_id = int(datos.get("huella_id", datos.get("id", datos.get("fingerprint_id"))))
             return huella_id, None

@@ -1,5 +1,7 @@
 from datetime import datetime
+import os
 import sqlite3
+from urllib.parse import urlparse
 
 from flask import Flask, render_template, redirect, request, url_for, flash
 
@@ -7,6 +9,7 @@ from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
+from modules.presencia.huella_service import probar_conexion_raspberry
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para flash messages
@@ -57,6 +60,20 @@ def _obtener_nombre_profesor(db_manager, profesor_id):
 
     profesor = db_manager.get_profesor_by_id(profesor_id)
     return profesor.nombre if profesor else f"Profesor {profesor_id}"
+
+
+def _redireccion_segura(destino, endpoint_fallback="vista_presencia"):
+    if destino and destino.startswith("/") and not destino.startswith("//"):
+        return redirect(destino)
+    return redirect(url_for(endpoint_fallback))
+
+
+def _obtener_ip_y_puerto_raspberry():
+    url_base = os.environ.get("PIFINGER_URL", "http://192.168.208.120:5001")
+    parsed = urlparse(url_base)
+    host = parsed.hostname or "192.168.208.120"
+    port = parsed.port or (443 if parsed.scheme == "https" else 5001)
+    return host, port
 
 
 def _agrupar_candidatos_por_hora(ranking_profesores):
@@ -205,6 +222,33 @@ def registrar_guardia():
 
     return redirect(url_for("vista_guardias", fecha=dia))
 
+
+@app.route("/guardias/registrar-huella", methods=["POST"])
+def registrar_huella_guardias():
+    fecha = request.form.get("fecha")
+    ip_raspberry, puerto_raspberry = _obtener_ip_y_puerto_raspberry()
+
+    if not probar_conexion_raspberry(ip=ip_raspberry, port=puerto_raspberry, timeout=10):
+        flash(
+            f"No hay conexión con Raspberry Pi ({ip_raspberry}:{puerto_raspberry}).",
+            "error",
+        )
+        return redirect(url_for("vista_guardias", fecha=fecha))
+
+    try:
+        profesor_id = identificar_profesor()
+        if profesor_id:
+            tipo = registrar_presencia(profesor_id, _obtener_db_path())
+            flash(f"Registro de {tipo} exitoso", "success")
+        else:
+            flash("Profesor no identificado", "error")
+    except ValueError as e:
+        flash(str(e), "error")
+    except Exception as e:
+        flash(f"Error al registrar presencia: {str(e)}", "error")
+
+    return redirect(url_for("vista_guardias", fecha=fecha))
+
 @app.route("/presencia")
 def vista_presencia():
     estado = obtener_estado_actual(_obtener_db_path())
@@ -212,6 +256,7 @@ def vista_presencia():
 
 @app.route("/presencia/registrar", methods=["POST"])
 def registrar():
+    destino = request.form.get("next") or request.args.get("next")
     try:
         profesor_id = request.form.get("profesor_id", type=int)
         if profesor_id is None:
@@ -226,7 +271,7 @@ def registrar():
     except Exception as e:
         flash(f"Error al registrar presencia: {str(e)}", "error")
 
-    return redirect(url_for("vista_presencia"))
+    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -45,7 +45,7 @@ def db_manager():
 
 
 def test_insert_and_get_profesor(db_manager):
-    profesor = Profesor(nombre="Juan Pérez", departamento="Matemáticas", huella_id="12", activo=1)
+    profesor = Profesor(nombre="Juan Pérez", departamento="Matemáticas", huella_id=12, activo=1)
 
     inserted = db_manager.insert_profesor(profesor)
     retrieved = db_manager.get_profesor_by_id(inserted.id)
@@ -53,12 +53,12 @@ def test_insert_and_get_profesor(db_manager):
     assert inserted.id is not None
     assert retrieved.nombre == "Juan Pérez"
     assert retrieved.departamento == "Matemáticas"
-    assert retrieved.huella_id == "12"
+    assert retrieved.huella_id == 12
     assert retrieved.activo == 1
 
 
 def test_update_profesor(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Pedro Sánchez", huella_id="44", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Pedro Sánchez", huella_id=44, activo=1))
     profesor.nombre = "Pedro Sánchez Updated"
     profesor.guardias_acumuladas = 5
 
@@ -70,7 +70,7 @@ def test_update_profesor(db_manager):
 
 
 def test_insert_and_get_horarios_by_dia(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Test Profesor", huella_id="66", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Profesor", huella_id=66, activo=1))
     horario = Horario(
         profesor_id=profesor.id,
         dia="Lunes",
@@ -90,7 +90,7 @@ def test_insert_and_get_horarios_by_dia(db_manager):
 
 
 def test_insert_and_get_presencia_hoy(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Test Presencia", huella_id="77", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Presencia", huella_id=77, activo=1))
     presencia = Presencia(profesor_id=profesor.id, tipo="entrada")
 
     inserted = db_manager.insert_presencia(presencia)
@@ -103,7 +103,7 @@ def test_insert_and_get_presencia_hoy(db_manager):
 
 def test_insert_and_get_ausencias_hoy(db_manager):
     hoy = datetime.now().strftime("%Y-%m-%d")
-    profesor = db_manager.insert_profesor(Profesor(nombre="Test Ausencia", huella_id="99", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Ausencia", huella_id=99, activo=1))
     ausencia = Ausencia(profesor_id=profesor.id, dia=hoy, hora=2, motivo="Enfermedad")
 
     inserted = db_manager.insert_ausencia(ausencia)
@@ -115,7 +115,7 @@ def test_insert_and_get_ausencias_hoy(db_manager):
 
 
 def test_insert_and_get_guardias_by_dia(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Test Guardia", huella_id="00", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Guardia", huella_id=0, activo=1))
     guardia = Guardia(
         dia="Martes",
         hora=3,
@@ -136,7 +136,7 @@ def test_insert_and_get_guardias_by_dia(db_manager):
 
 
 def test_update_guardia_cubierta(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Test Update Guardia", huella_id="121", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Test Update Guardia", huella_id=121, activo=1))
     guardia = db_manager.insert_guardia(
         Guardia(
             dia="Miércoles",
@@ -156,7 +156,7 @@ def test_update_guardia_cubierta(db_manager):
 
 
 def test_registrar_guardia_realizada_actualiza_contadores_y_persistencia(db_manager):
-    profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Guardia", huella_id="201", activo=1))
+    profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Guardia", huella_id=201, activo=1))
 
     registrado = db_manager.registrar_guardia_realizada(
         "Lunes",

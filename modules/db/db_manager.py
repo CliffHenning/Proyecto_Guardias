@@ -1,4 +1,5 @@
 import sqlite3
+import re
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -64,15 +65,78 @@ class DBManager:
     def _ensure_profesores_schema(self, conn):
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(profesores)")
-        columnas = {row[1] for row in cursor.fetchall()}
+        schema_rows = cursor.fetchall()
+        columnas = {row[1] for row in schema_rows}
+        tipos = {row[1]: (row[2] or "").upper() for row in schema_rows}
         schema_actualizado = False
         if "departamento" not in columnas:
             cursor.execute("ALTER TABLE profesores ADD COLUMN departamento TEXT")
             schema_actualizado = True
         if "huella_id" not in columnas:
-            cursor.execute("ALTER TABLE profesores ADD COLUMN huella_id TEXT")
+            cursor.execute("ALTER TABLE profesores ADD COLUMN huella_id INTEGER")
             schema_actualizado = True
+        elif "INT" not in tipos.get("huella_id", ""):
+            cursor.execute("ALTER TABLE profesores RENAME TO profesores_legacy_huella")
+            cursor.execute(
+                """
+                CREATE TABLE profesores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    departamento TEXT,
+                    huella_id INTEGER,
+                    activo INTEGER DEFAULT 1,
+                    guardias_acumuladas INTEGER DEFAULT 0,
+                    guardias_semana INTEGER DEFAULT 0
+                )
+                """
+            )
+            cursor.execute(
+                """
+                INSERT INTO profesores (id, nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana)
+                SELECT id, nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana
+                FROM profesores_legacy_huella
+                """
+            )
+            cursor.execute("DROP TABLE profesores_legacy_huella")
+            schema_actualizado = True
+
+        self._normalizar_huella_ids(conn)
         if schema_actualizado:
+            conn.commit()
+
+    @staticmethod
+    def _normalizar_huella_id_valor(valor):
+        if valor is None:
+            return None
+        if isinstance(valor, int):
+            return valor
+
+        texto = str(valor).strip()
+        if not texto:
+            return None
+
+        if texto.isdigit():
+            return int(texto)
+
+        encontrados = re.findall(r"\d+", texto)
+        if encontrados:
+            return int(encontrados[0])
+        return None
+
+    def _normalizar_huella_ids(self, conn):
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, huella_id FROM profesores")
+        cambios = []
+        for profesor_id, huella_id in cursor.fetchall():
+            huella_normalizada = self._normalizar_huella_id_valor(huella_id)
+            if huella_id != huella_normalizada:
+                cambios.append((huella_normalizada, profesor_id))
+
+        if cambios:
+            cursor.executemany(
+                "UPDATE profesores SET huella_id = ? WHERE id = ?",
+                cambios,
+            )
             conn.commit()
 
     def _ensure_horarios_schema(self, conn):
@@ -144,6 +208,7 @@ class DBManager:
 
     def insert_profesor(self, profesor):
         """Inserta un nuevo profesor."""
+        profesor.huella_id = self._normalizar_huella_id_valor(profesor.huella_id)
         profesor.id = self._insert("""
             INSERT INTO profesores (nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -152,6 +217,7 @@ class DBManager:
 
     def update_profesor(self, profesor):
         """Actualiza un profesor."""
+        profesor.huella_id = self._normalizar_huella_id_valor(profesor.huella_id)
         self._execute_write("""
             UPDATE profesores SET nombre=?, departamento=?, huella_id=?, activo=?, guardias_acumuladas=?, guardias_semana=?
             WHERE id=?

@@ -26,7 +26,7 @@ def test_describir_horas_agrupa_varias_horas_ordenadas():
 
 
 def test_determinar_profesores_disponibles_requiere_tramo_de_guardia_y_excluye_guardia_de_la_carga():
-    profesor = Profesor(id=1, nombre="Profesor Huella", huella_id="101", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    profesor = Profesor(id=1, nombre="Profesor Huella", huella_id=101, activo=1, guardias_acumuladas=0, guardias_semana=0)
     presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
     ausencias = []
 
@@ -43,11 +43,11 @@ def test_determinar_profesores_disponibles_requiere_tramo_de_guardia_y_excluye_g
     assert disponible.profesor.id == 1
     assert disponible.hora_disponible == 1
     assert disponible.profesor.carga_lectiva == 1
-    assert disponible.profesor.huella_id == "101"
+    assert disponible.profesor.huella_id == 101
 
 
 def test_determinar_profesores_disponibles_no_usa_huecos_sin_guardia():
-    profesor = Profesor(id=1, nombre="Profesor Huella", huella_id="101", activo=1, guardias_acumuladas=0, guardias_semana=0)
+    profesor = Profesor(id=1, nombre="Profesor Huella", huella_id=101, activo=1, guardias_acumuladas=0, guardias_semana=0)
     presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
     ausencias = []
 

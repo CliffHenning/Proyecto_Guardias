@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS profesores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
     departamento TEXT,
-    huella_id TEXT,
+    huella_id INTEGER,
     activo INTEGER DEFAULT 1,
     guardias_acumuladas INTEGER DEFAULT 0,
     guardias_semana INTEGER DEFAULT 0

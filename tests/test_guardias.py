@@ -12,8 +12,8 @@ def test_motor_guardias_integration_sugiere_profesor_para_la_guardia_calculada()
     motor = MotorGuardias(db_path=":memory:")
 
     profesores = [
-        Profesor(id=1, nombre="Profesor 1", huella_id="1", activo=1, guardias_acumuladas=0, guardias_semana=0),
-        Profesor(id=2, nombre="Profesor 2", huella_id="2", activo=1, guardias_acumuladas=0, guardias_semana=1),
+        Profesor(id=1, nombre="Profesor 1", huella_id=1, activo=1, guardias_acumuladas=0, guardias_semana=0),
+        Profesor(id=2, nombre="Profesor 2", huella_id=2, activo=1, guardias_acumuladas=0, guardias_semana=1),
     ]
     presencias = [Presencia(profesor_id=1, timestamp="2026-04-09 08:00:00", tipo="entrada")]
     ausencias = [Ausencia(profesor_id=99, dia="2026-04-09", hora=1, motivo="Enfermedad")]

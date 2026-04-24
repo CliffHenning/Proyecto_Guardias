@@ -58,12 +58,37 @@
                     <div class="card content-card bg-body-tertiary">
                         <div class="card-body p-4">
                             <p class="text-uppercase text-secondary small fw-semibold mb-3">Lectura de huella</p>
-                            <form action="{{ url_for('registrar') }}" method="post" class="d-grid">
-                                <button class="btn btn-primary btn-lg" type="submit">Registrar huella</button>
+                            <form id="form-registro-huella" action="{{ url_for('registrar') }}" method="post" class="d-grid">
+                                <button id="btn-registrar-huella" class="btn btn-primary btn-lg" type="submit">Registrar huella</button>
                             </form>
                         </div>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <section class="card stat-card mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h2 class="h4 mb-0">Alta de huella para profesor</h2>
+                    <span class="badge text-bg-light border">PiFinger + BD</span>
+                </div>
+                <p class="text-secondary small mb-3">Esta acción pide a la Raspberry Pi registrar una nueva huella y guarda el huella_id resultante en la base de datos para el profesor seleccionado.</p>
+                <form id="form-enrolar-huella" action="{{ url_for('enrolar_huella_profesor') }}" method="post" class="row g-3 align-items-end">
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <div class="col-lg-6">
+                        <label for="profesor_id" class="form-label">Profesor</label>
+                        <select id="profesor_id" name="profesor_id" class="form-select" required>
+                            <option value="" selected disabled>Seleccionar profesor</option>
+                            {% for profesor in profesores %}
+                            <option value="{{ profesor.id }}">{{ profesor.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-lg-6 d-grid">
+                        <button id="btn-enrolar-huella" class="btn btn-outline-primary" type="submit" {% if not profesores %}disabled{% endif %}>Enrolar huella</button>
+                    </div>
+                </form>
             </div>
         </section>
 
@@ -105,6 +130,7 @@
                         </div>
                     {% endfor %}
                 </section>
+                <div id="resultado-registro-data" data-category="{{ messages[0][0] }}" data-message="{{ messages[0][1] }}"></div>
             {% endif %}
         {% endwith %}
 
@@ -148,6 +174,154 @@
         </section>
     </main>
 
+    <div class="modal fade" id="scanDelayModal" tabindex="-1" aria-labelledby="scanDelayModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="scanDelayModalLabel">Preparando lectura de huella</h5>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Coloca el dedo en el sensor cuando empiece la lectura.</p>
+                    <p class="mb-0">Iniciando en <strong><span id="scanDelaySeconds">10</span>s</strong>...</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="cancelScanDelayBtn" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="resultadoRegistroModal" tabindex="-1" aria-labelledby="resultadoRegistroModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resultadoRegistroModalLabel">Resultado del registro</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body" id="resultadoRegistroModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            const formHuella = document.getElementById("form-registro-huella");
+            const btnRegistrar = document.getElementById("btn-registrar-huella");
+            const formEnrolar = document.getElementById("form-enrolar-huella");
+            const btnEnrolar = document.getElementById("btn-enrolar-huella");
+            const secondsEl = document.getElementById("scanDelaySeconds");
+            const cancelBtn = document.getElementById("cancelScanDelayBtn");
+            const delayModalEl = document.getElementById("scanDelayModal");
+            const delayTitleEl = document.getElementById("scanDelayModalLabel");
+            const delayBodyTextEl = delayModalEl ? delayModalEl.querySelector(".modal-body p.mb-2") : null;
+
+            let scanDelayInterval = null;
+            let envioEnCurso = false;
+            let botonActivo = null;
+
+            if (delayModalEl && delayTitleEl && delayBodyTextEl) {
+                const delayModal = new bootstrap.Modal(delayModalEl);
+
+                const iniciarCuentaAtras = function (event, form, boton, titulo, descripcion, segundosIniciales) {
+                    if (envioEnCurso) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    let segundos = segundosIniciales;
+                    secondsEl.textContent = String(segundos);
+                    delayTitleEl.textContent = titulo;
+                    delayBodyTextEl.textContent = descripcion;
+                    boton.disabled = true;
+                    botonActivo = boton;
+                    delayModal.show();
+
+                    scanDelayInterval = window.setInterval(function () {
+                        segundos -= 1;
+                        secondsEl.textContent = String(Math.max(segundos, 0));
+
+                        if (segundos <= 0) {
+                            window.clearInterval(scanDelayInterval);
+                            scanDelayInterval = null;
+                            envioEnCurso = true;
+                            form.submit();
+                        }
+                    }, 1000);
+                };
+
+                if (formHuella && btnRegistrar) {
+                    formHuella.addEventListener("submit", function (event) {
+                        iniciarCuentaAtras(
+                            event,
+                            formHuella,
+                            btnRegistrar,
+                            "Preparando lectura de huella",
+                            "Coloca el dedo en el sensor cuando empiece la lectura.",
+                            10
+                        );
+                    });
+                }
+
+                if (formEnrolar && btnEnrolar) {
+                    formEnrolar.addEventListener("submit", function (event) {
+                        iniciarCuentaAtras(
+                            event,
+                            formEnrolar,
+                            btnEnrolar,
+                            "Preparando enrolado de huella",
+                            "Coloca el dedo que quieres vincular cuando termine la cuenta atrás.",
+                            10
+                        );
+                    });
+                }
+
+                cancelBtn.addEventListener("click", function () {
+                    if (scanDelayInterval) {
+                        window.clearInterval(scanDelayInterval);
+                        scanDelayInterval = null;
+                    }
+                    if (botonActivo) {
+                        botonActivo.disabled = false;
+                        botonActivo = null;
+                    }
+                });
+
+                delayModalEl.addEventListener("hidden.bs.modal", function () {
+                    if (!envioEnCurso && scanDelayInterval) {
+                        window.clearInterval(scanDelayInterval);
+                        scanDelayInterval = null;
+                    }
+                    if (!envioEnCurso && botonActivo) {
+                        botonActivo.disabled = false;
+                        botonActivo = null;
+                    }
+                });
+            }
+
+            const resultadoData = document.getElementById("resultado-registro-data");
+            const resultadoModalEl = document.getElementById("resultadoRegistroModal");
+            const resultadoTitleEl = document.getElementById("resultadoRegistroModalLabel");
+            const resultadoBodyEl = document.getElementById("resultadoRegistroModalBody");
+
+            if (resultadoData && resultadoModalEl && resultadoBodyEl && resultadoTitleEl) {
+                const category = resultadoData.dataset.category || "info";
+                const message = resultadoData.dataset.message || "Operación completada";
+
+                if (category === "success") {
+                    resultadoTitleEl.textContent = "Profesor detectado";
+                } else {
+                    resultadoTitleEl.textContent = "No se pudo registrar";
+                }
+                resultadoBodyEl.textContent = message;
+
+                const resultadoModal = new bootstrap.Modal(resultadoModalEl);
+                resultadoModal.show();
+            }
+        })();
+    </script>
 </body>
 </html>

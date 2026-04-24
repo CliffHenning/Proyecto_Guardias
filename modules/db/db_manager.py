@@ -206,6 +206,14 @@ class DBManager:
             model_cls=Profesor,
         )
 
+    def set_profesor_huella_id(self, profesor_id, huella_id):
+        """Asigna (o reemplaza) el huella_id de un profesor."""
+        huella_normalizada = self._normalizar_huella_id_valor(huella_id)
+        return self._execute_write(
+            "UPDATE profesores SET huella_id = ? WHERE id = ?",
+            (huella_normalizada, profesor_id),
+        )
+
     def insert_profesor(self, profesor):
         """Inserta un nuevo profesor."""
         profesor.huella_id = self._normalizar_huella_id_valor(profesor.huella_id)

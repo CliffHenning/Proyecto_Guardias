@@ -57,6 +57,17 @@ def test_insert_and_get_profesor(db_manager):
     assert retrieved.activo == 1
 
 
+def test_set_profesor_huella_id_actualiza_valor(db_manager):
+    """Debe permitir actualizar el huella_id de un profesor existente."""
+    profesor = db_manager.insert_profesor(Profesor(nombre="Profesor Huella", huella_id=None, activo=1))
+
+    filas = db_manager.set_profesor_huella_id(profesor.id, 88)
+    actualizado = db_manager.get_profesor_by_id(profesor.id)
+
+    assert filas == 1
+    assert actualizado.huella_id == 88
+
+
 def test_update_profesor(db_manager):
     profesor = db_manager.insert_profesor(Profesor(nombre="Pedro Sánchez", huella_id=44, activo=1))
     profesor.nombre = "Pedro Sánchez Updated"

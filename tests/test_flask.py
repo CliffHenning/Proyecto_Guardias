@@ -123,6 +123,66 @@ def test_ruta_guardias_pasa_datos_simulados(monkeypatch, cliente):
     assert b"Matem\xc3\xa1ticas" in respuesta.data
 
 
+def test_ruta_horario_devuelve_200(monkeypatch, cliente):
+    """La ruta /horario debe responder con código HTTP 200."""
+    monkeypatch.setattr(app_module, "obtener_datos_horario", lambda *_args, **_kwargs: {
+        "fecha": "2026-04-15",
+        "fecha_texto": "Miércoles 2026-04-15",
+        "dia_semana": "Miércoles",
+        "profesores": [{"id": 1, "nombre": "Ana García", "departamento": "Matemáticas"}],
+        "horas": [{"hora": 1, "hora_texto": "1 (8:45-9:45)"}],
+        "celdas": {
+            1: {
+                1: {
+                    "tiene_horario": True,
+                    "tipo": "clase",
+                    "asignatura": "Álgebra",
+                    "aula": "A201",
+                    "ausente": False,
+                    "motivo": "",
+                }
+            }
+        },
+        "ausencias_totales": 0,
+    })
+
+    respuesta = cliente.get("/horario")
+
+    assert respuesta.status_code == 200
+    assert b"Horario del Profesorado" in respuesta.data
+
+
+def test_ruta_horario_marca_ausente_en_rojo(monkeypatch, cliente):
+    """La vista de horario debe mostrar el estado Ausente cuando haya ausencia en la celda."""
+    monkeypatch.setattr(app_module, "obtener_datos_horario", lambda *_args, **_kwargs: {
+        "fecha": "2026-04-15",
+        "fecha_texto": "Miércoles 2026-04-15",
+        "dia_semana": "Miércoles",
+        "profesores": [{"id": 5, "nombre": "Profesor Ausente", "departamento": "Lengua"}],
+        "horas": [{"hora": 2, "hora_texto": "2 (9:35-10:25)"}],
+        "celdas": {
+            2: {
+                5: {
+                    "tiene_horario": True,
+                    "tipo": "clase",
+                    "asignatura": "Lengua",
+                    "aula": "B103",
+                    "ausente": True,
+                    "motivo": "Ausencia detectada automáticamente",
+                }
+            }
+        },
+        "ausencias_totales": 1,
+    })
+
+    respuesta = cliente.get("/horario")
+
+    assert respuesta.status_code == 200
+    assert b"Profesor Ausente" in respuesta.data
+    assert b"Ausente" in respuesta.data
+    assert b"B103" in respuesta.data
+
+
 def test_ruta_presencia_pasa_estado_al_template(monkeypatch, cliente):
     """La ruta /presencia pasa los datos de estado simulados correctamente."""
     estado_simulado = {
@@ -134,6 +194,32 @@ def test_ruta_presencia_pasa_estado_al_template(monkeypatch, cliente):
 
     assert respuesta.status_code == 200
     assert b"Profesor Test" in respuesta.data
+
+
+def test_ruta_enrolar_huella_profesor_ok(monkeypatch, cliente):
+    """La ruta de enrolado debe mostrar mensaje de éxito cuando el servicio responde OK."""
+    monkeypatch.setattr(app_module, "registrar_huella_profesor", lambda *_args, **_kwargs: (True, "Huella registrada", 17))
+
+    respuesta = cliente.post(
+        "/presencia/enrolar",
+        data={"profesor_id": 1, "huella_id_preferida": 17, "next": "/presencia"},
+        follow_redirects=True,
+    )
+
+    assert respuesta.status_code == 200
+    assert b"Huella registrada" in respuesta.data
+
+
+def test_ruta_enrolar_huella_profesor_requiere_profesor(cliente):
+    """Debe validar que exista profesor seleccionado en el formulario."""
+    respuesta = cliente.post(
+        "/presencia/enrolar",
+        data={"next": "/presencia"},
+        follow_redirects=True,
+    )
+
+    assert respuesta.status_code == 200
+    assert b"Selecciona un profesor" in respuesta.data
 
 
 def test_obtener_datos_guardias_no_retrocede_a_ultima_fecha_con_ausencias(monkeypatch):

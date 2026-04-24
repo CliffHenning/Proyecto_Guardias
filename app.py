@@ -9,7 +9,7 @@ from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
-from modules.presencia.huella_service import probar_conexion_raspberry
+from modules.presencia.huella_service import probar_conexion_raspberry, registrar_huella_profesor
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para flash messages
@@ -252,7 +252,15 @@ def registrar_huella_guardias():
 @app.route("/presencia")
 def vista_presencia():
     estado = obtener_estado_actual(_obtener_db_path())
-    return render_template("presencia.html", estado=estado)
+    profesores = [
+        {
+            "id": profesor_id,
+            "nombre": info.get("nombre", f"Profesor {profesor_id}"),
+        }
+        for profesor_id, info in estado.items()
+    ]
+    profesores.sort(key=lambda p: p["nombre"].casefold())
+    return render_template("presencia.html", estado=estado, profesores=profesores)
 
 @app.route("/presencia/registrar", methods=["POST"])
 def registrar():
@@ -270,6 +278,29 @@ def registrar():
         flash(str(e), "error")
     except Exception as e:
         flash(f"Error al registrar presencia: {str(e)}", "error")
+
+    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+
+@app.route("/presencia/enrolar", methods=["POST"])
+def enrolar_huella_profesor():
+    destino = request.form.get("next") or request.args.get("next")
+    profesor_id = request.form.get("profesor_id", type=int)
+    huella_id_preferida = request.form.get("huella_id_preferida", type=int)
+
+    if profesor_id is None:
+        flash("Selecciona un profesor para registrar su huella", "error")
+        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+    try:
+        ok, mensaje, _huella_id = registrar_huella_profesor(
+            profesor_id,
+            db_path=_obtener_db_path(),
+            huella_id_preferida=huella_id_preferida,
+        )
+        flash(mensaje, "success" if ok else "error")
+    except Exception as e:
+        flash(f"Error al enrolar huella: {str(e)}", "error")
 
     return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
 

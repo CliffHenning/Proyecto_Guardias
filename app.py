@@ -9,12 +9,18 @@ from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
-from modules.presencia.huella_service import probar_conexion_raspberry, registrar_huella_profesor
+from modules.presencia.huella_service import (
+    probar_conexion_raspberry,
+    registrar_huella_profesor,
+    borrar_huella_sensor,
+    borrar_todas_huellas_sensor,
+)
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para flash messages
 app.config.setdefault("DB_PATH", "ies.db")
 app.config.setdefault("AUSENCIA_MINUTOS_GRACIA", 10)
+app.config.setdefault("AUSENCIA_HORA_CORTE", "16:00")
 
 
 def _datos_guardias_vacios(fecha):
@@ -130,6 +136,7 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
             motor.detectar_ausencias_automaticas(
                 ahora=ahora,
                 margen_minutos=app.config.get("AUSENCIA_MINUTOS_GRACIA", 10),
+                hora_corte_global=app.config.get("AUSENCIA_HORA_CORTE", "16:00"),
             )
         db_manager = motor.db_manager
         resultado = motor.calcular_guardias(dia=fecha)
@@ -303,6 +310,56 @@ def enrolar_huella_profesor():
         flash(f"Error al enrolar huella: {str(e)}", "error")
 
     return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+
+@app.route("/presencia/borrar-huella-sensor", methods=["POST"])
+def borrar_huella_sensor_route():
+    destino = request.form.get("next") or request.args.get("next")
+    huella_id = request.form.get("huella_id", type=int)
+    if huella_id is None:
+        flash("Indica el ID de huella a borrar", "error")
+        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+    try:
+        ok, mensaje = borrar_huella_sensor(huella_id)
+        flash(mensaje, "success" if ok else "error")
+    except Exception as e:
+        flash(f"Error al borrar huella: {e}", "error")
+    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+
+@app.route("/presencia/borrar-todas-huellas-sensor", methods=["POST"])
+def borrar_todas_huellas_sensor_route():
+    destino = request.form.get("next") or request.args.get("next")
+    confirmacion = request.form.get("confirmacion", "").strip()
+    if confirmacion != "BORRAR":
+        flash("Escribe BORRAR en el campo de confirmación para proceder", "error")
+        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+    try:
+        ok, mensaje = borrar_todas_huellas_sensor()
+        flash(mensaje, "success" if ok else "error")
+    except Exception as e:
+        flash(f"Error al borrar todas las huellas: {e}", "error")
+    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+
+@app.route("/presencia/borrar-huella-bd", methods=["POST"])
+def borrar_huella_bd_route():
+    destino = request.form.get("next") or request.args.get("next")
+    profesor_id = request.form.get("profesor_id", type=int)
+    if profesor_id is None:
+        flash("Selecciona un profesor", "error")
+        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+    try:
+        db_manager = DBManager(_obtener_db_path())
+        actualizados = db_manager.set_profesor_huella_id(profesor_id, None)
+        if actualizados >= 1:
+            flash("Huella eliminada de la base de datos", "success")
+        else:
+            flash("No se encontró el profesor", "error")
+    except Exception as e:
+        flash(f"Error al borrar huella de la BD: {e}", "error")
+    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
 
 if __name__ == "__main__":
     app.run(debug=True)

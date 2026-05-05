@@ -152,6 +152,40 @@ def test_motor_detecta_ausencias_automaticas_del_tramo_actual():
     assert ausencias[0].motivo == "Ausencia detectada automáticamente"
 
 
+def test_motor_detecta_ausencias_en_todas_las_horas_pendientes_desde_las_16():
+    class StubManager:
+        def __init__(self):
+            self.ausencias = {}
+
+        def get_horarios_by_dia(self, dia):
+            return [
+                Horario(profesor_id=10, dia=dia, hora=7, aula="A101", asignatura="Matemáticas"),
+                Horario(profesor_id=10, dia=dia, hora=8, aula="A101", asignatura="Matemáticas"),
+                Horario(profesor_id=30, dia=dia, hora=8, aula="B201", asignatura="Lengua"),
+            ]
+
+        def get_presencias_hoy(self, fecha=None):
+            return [Presencia(profesor_id=30, timestamp=f"{fecha} 15:30:00", tipo="entrada")]
+
+        def ensure_ausencia(self, ausencia):
+            clave = (ausencia.profesor_id, ausencia.dia, ausencia.hora)
+            self.ausencias.setdefault(clave, ausencia)
+            return self.ausencias[clave]
+
+    momento = datetime.strptime("2026-04-15 16:05:00", "%Y-%m-%d %H:%M:%S")
+    motor = MotorGuardias(db_path=":memory:")
+    motor.db_manager = StubManager()
+
+    ausencias = motor.detectar_ausencias_automaticas(
+        ahora=momento,
+        margen_minutos=10,
+        hora_corte_global="16:00",
+    )
+
+    huellas = sorted((a.profesor_id, a.hora) for a in ausencias)
+    assert huellas == [(10, 7), (10, 8)]
+
+
 def test_motor_ignora_ausencias_sobre_tramos_de_guardia():
     motor = MotorGuardias(db_path=":memory:")
 

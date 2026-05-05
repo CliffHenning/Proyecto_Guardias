@@ -86,8 +86,13 @@ class MotorGuardias:
     def __init__(self, db_path="ies.db"):
         self.db_manager = DBManager(db_path)
 
-    def detectar_ausencias_automaticas(self, ahora=None, margen_minutos=10):
-        """Registra ausencias automáticas del tramo actual para docentes sin fichaje de entrada."""
+    def detectar_ausencias_automaticas(self, ahora=None, margen_minutos=10, hora_corte_global="16:00"):
+        """Registra ausencias automáticas para docentes sin fichaje de entrada.
+
+        Regla general:
+        - Antes de la hora de corte, solo procesa el tramo lectivo actual.
+        - A partir de la hora de corte, procesa todos los tramos lectivos pendientes del día.
+        """
         ahora = ahora or datetime.now()
         if ahora.weekday() > 4:
             return []
@@ -106,26 +111,49 @@ class MotorGuardias:
         if not horarios_hora_actual:
             return []
 
+        try:
+            hora_corte = datetime.strptime(hora_corte_global, "%H:%M").time()
+        except ValueError:
+            hora_corte = datetime.strptime("16:00", "%H:%M").time()
+
+        if ahora.time() >= hora_corte:
+            horas_objetivo = sorted({
+                horario.hora
+                for horario in horarios
+                if horario.es_clase_lectiva() and horario.hora >= hora_actual
+            })
+        else:
+            horas_objetivo = [hora_actual]
+
+        if not horas_objetivo:
+            return []
+
         presencias = self.db_manager.get_presencias_hoy(fecha)
         ultima_presencia_por_profesor = {}
         for presencia in presencias:
             ultima_presencia_por_profesor[presencia.profesor_id] = presencia
 
         ausencias = []
-        for horario in horarios_hora_actual:
-            ultima_presencia = ultima_presencia_por_profesor.get(horario.profesor_id)
-            if ultima_presencia is not None and ultima_presencia.tipo == "entrada":
-                continue
+        for hora_objetivo in horas_objetivo:
+            horarios_hora = [
+                horario
+                for horario in horarios
+                if horario.hora == hora_objetivo and horario.es_clase_lectiva()
+            ]
+            for horario in horarios_hora:
+                ultima_presencia = ultima_presencia_por_profesor.get(horario.profesor_id)
+                if ultima_presencia is not None and ultima_presencia.tipo == "entrada":
+                    continue
 
-            ausencia = self.db_manager.ensure_ausencia(
-                Ausencia(
-                    profesor_id=horario.profesor_id,
-                    dia=fecha,
-                    hora=hora_actual,
-                    motivo="Ausencia detectada automáticamente",
+                ausencia = self.db_manager.ensure_ausencia(
+                    Ausencia(
+                        profesor_id=horario.profesor_id,
+                        dia=fecha,
+                        hora=hora_objetivo,
+                        motivo="Ausencia detectada automáticamente",
+                    )
                 )
-            )
-            ausencias.append(ausencia)
+                ausencias.append(ausencia)
 
         return ausencias
 

@@ -77,3 +77,29 @@ def test_registrar_huella_profesor_fallback_sin_huella_detectada(monkeypatch):
     assert ok is False
     assert huella_id is None
     assert "No hay endpoint de alta" in mensaje
+
+
+def test_identificar_huella_limita_la_busqueda_a_huellas_registradas(monkeypatch):
+    class FakeDBManager:
+        def __init__(self, _db_path="ies.db"):
+            pass
+
+        def get_profesores(self):
+            return [
+                Profesor(id=1, nombre="Ana", huella_id=12, activo=1),
+                Profesor(id=2, nombre="Luis", huella_id=19, activo=1),
+            ]
+
+    recibido = {}
+
+    def fake_identificar_via_red(*, huella_ids_validos=None):
+        recibido["ids"] = huella_ids_validos
+        return 19
+
+    monkeypatch.setattr(huella_service, "DBManager", FakeDBManager)
+    monkeypatch.setattr(huella_service, "_identificar_via_red", fake_identificar_via_red)
+
+    profesor_id = huella_service.identificar_huella()
+
+    assert profesor_id == 2
+    assert recibido["ids"] == {12, 19}

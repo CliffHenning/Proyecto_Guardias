@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Presencia</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         body {
             background: linear-gradient(180deg, #f5f7fb 0%, #eef3f8 100%);
@@ -69,33 +70,43 @@
 
         <section class="card stat-card mb-4">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <h2 class="h4 mb-0">Alta de huella para profesor</h2>
-                    <span class="badge text-bg-light border">PiFinger + BD</span>
-                </div>
-                <p class="text-secondary small mb-3">Esta acción pide a la Raspberry Pi registrar una nueva huella y guarda el huella_id resultante en la base de datos para el profesor seleccionado.</p>
-                <div class="row g-3">
-                    <div class="col-lg">
-                        <form id="form-enrolar-huella" action="{{ url_for('enrolar_huella_profesor') }}" method="post" class="row g-2 align-items-end">
+                <div class="row g-4 align-items-center">
+                    <div class="col-lg-5">
+                        <div class="d-flex align-items-center gap-3 mb-2">
+                            <div class="rounded-3 p-2 bg-primary bg-opacity-10 text-primary lh-1" style="font-size:1.75rem">
+                                <i class="bi bi-fingerprint"></i>
+                            </div>
+                            <h2 class="h4 mb-0">Alta de huella</h2>
+                        </div>
+                        <p class="text-secondary small mb-0 mt-2">
+                            Registra una nueva huella en el sensor de la Raspberry Pi y vincula el identificador resultante al profesor seleccionado.
+                        </p>
+                    </div>
+                    <div class="col-lg-7">
+                        <form id="form-enrolar-huella" action="{{ url_for('enrolar_huella_profesor') }}" method="post">
                             <input type="hidden" name="next" value="{{ request.path }}">
-                            <div class="col-12">
-                                <label for="profesor_id" class="form-label">Profesor</label>
+                            <label for="profesor_id" class="form-label fw-medium">Selecciona un profesor</label>
+                            <div class="input-group input-group-lg">
                                 <select id="profesor_id" name="profesor_id" class="form-select" required>
-                                    <option value="" selected disabled>Seleccionar profesor</option>
+                                    <option value="" selected disabled>Seleccionar profesor…</option>
                                     {% for profesor in profesores %}
                                     <option value="{{ profesor.id }}">{{ profesor.nombre }}</option>
                                     {% endfor %}
                                 </select>
+                                <button id="btn-enrolar-huella" class="btn btn-primary px-4" type="submit" {% if not profesores %}disabled{% endif %}>
+                                    <i class="bi bi-plus-circle me-1"></i>Enrolar
+                                </button>
                             </div>
-                            <div class="col-12 d-grid">
-                                <button id="btn-enrolar-huella" class="btn btn-outline-primary" type="submit" {% if not profesores %}disabled{% endif %}>Enrolar huella</button>
-                            </div>
+                            {% if not profesores %}
+                            <p class="form-text text-danger mt-1"><i class="bi bi-exclamation-circle me-1"></i>No hay profesores disponibles.</p>
+                            {% endif %}
                         </form>
                     </div>
                 </div>
             </div>
         </section>
 
+        {% if debug == 1 %}
         <section class="card stat-card mb-4 border-warning">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -142,6 +153,7 @@
                 </div>
             </div>
         </section>
+        {% endif %}
 
         <section class="card stat-card mb-4">
             <div class="card-body p-4">

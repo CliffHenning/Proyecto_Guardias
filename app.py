@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, render_template, redirect, request, url_for, flash
 
-from config import describir_hora, describir_horas
+from config import describir_hora, describir_horas, DEBUG_UI
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
@@ -267,7 +267,7 @@ def vista_presencia():
         for profesor_id, info in estado.items()
     ]
     profesores.sort(key=lambda p: p["nombre"].casefold())
-    return render_template("presencia.html", estado=estado, profesores=profesores)
+    return render_template("presencia.html", estado=estado, profesores=profesores, debug=DEBUG_UI)
 
 @app.route("/presencia/registrar", methods=["POST"])
 def registrar():

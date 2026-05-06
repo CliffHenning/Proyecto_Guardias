@@ -297,6 +297,13 @@ def enrolar_huella_profesor():
         flash("Selecciona un profesor para registrar su huella", "error")
         return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
 
+    # Si no se indica ID preferido, calcular el siguiente libre para evitar
+    # que el sensor asigne el slot 0/1 y colisione con huellas ya registradas.
+    if huella_id_preferida is None:
+        db = DBManager(_obtener_db_path())
+        ids_usados = [p.huella_id for p in db.get_profesores() if p.huella_id is not None]
+        huella_id_preferida = (max(ids_usados) + 1) if ids_usados else 1
+
     try:
         ok, mensaje, _huella_id = registrar_huella_profesor(
             profesor_id,

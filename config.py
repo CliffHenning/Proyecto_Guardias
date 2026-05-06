@@ -1,5 +1,3 @@
-DEBUG_UI = 0  # 1 = mostrar herramientas de depuración, 0 = ocultarlas
-
 TRAMOS_HORARIOS = {
 	1: "8:45-9:45",
 	2: "9:35-10:25",

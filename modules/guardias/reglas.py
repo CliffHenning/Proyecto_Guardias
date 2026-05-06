@@ -4,10 +4,6 @@ Contiene las funciones que definen las reglas de negocio para determinar
 disponibilidad de profesores y asignación de guardias.
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
 from modules.guardias.models import ProfesorDisponible
 
 

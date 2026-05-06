@@ -1,9 +1,6 @@
-import sys
 import os
 import platform
 import re
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from modules.db.db_manager import DBManager
 
@@ -73,12 +70,7 @@ def _metodos_identificacion() -> list[str]:
     if _METODO_IDENTIFICACION_CACHE in {"GET", "POST"}:
         return [_METODO_IDENTIFICACION_CACHE]
 
-    metodos = ["GET", "POST"]
-    normalizados = []
-    for metodo in metodos:
-        if metodo in {"GET", "POST"} and metodo not in normalizados:
-            normalizados.append(metodo)
-    return normalizados
+    return ["GET", "POST"]
 
 
 def _rutas_enrolado() -> list[str]:
@@ -658,106 +650,3 @@ def registrar_huella_profesor(profesor_id, db_path="ies.db", huella_id_preferida
         return False, "No se pudo guardar el ID de huella en la base de datos", None
 
     return True, f"Huella registrada para {profesor.nombre}. ID: {huella_id}", huella_id
-
-
-# ── Gestión del sensor (borrado) ────────────────────────────────────────────
-
-def borrar_huella_sensor(huella_id: int) -> tuple[bool, str]:
-    """Elimina una huella del sensor de la Raspberry Pi por su ID.
-
-    Requiere que finger_server.py exponga GET /delete/<id> o GET /delete?id=<id>.
-    """
-    import urllib.request
-    import urllib.error
-    import json
-
-    if not isinstance(huella_id, int) or huella_id < 0:
-        return False, "ID de huella inválido"
-
-    base = _pifinger_url()
-    intentos = [
-        (f"{base}/delete/{huella_id}", "GET"),
-        (f"{base}/delete?id={huella_id}", "GET"),
-        (f"{base}/remove/{huella_id}", "GET"),
-        (f"{base}/remove?id={huella_id}", "GET"),
-    ]
-
-    ultimo_error = "El sensor no expone endpoint de borrado individual. Añade /delete/<id> a finger_server.py."
-    for url, metodo in intentos:
-        try:
-            req = urllib.request.Request(url=url, method=metodo)
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                crudo = resp.read().decode()
-            try:
-                datos = json.loads(crudo)
-            except json.JSONDecodeError:
-                datos = crudo
-
-            if isinstance(datos, dict):
-                resultado = str(datos.get("result", "")).upper()
-                if datos.get("ok") or resultado in {"OK", "PASS", "DELETED"}:
-                    return True, f"Huella ID={huella_id} eliminada del sensor"
-                ultimo_error = str(datos.get("error", datos.get("result", "Error desconocido")))
-            else:
-                texto = str(datos).strip().upper()
-                if texto.startswith(("OK", "PASS", "DELET")):
-                    return True, f"Huella ID={huella_id} eliminada del sensor"
-                ultimo_error = str(datos)
-
-        except urllib.error.HTTPError as e:
-            if e.code in {404, 405}:
-                continue
-            ultimo_error = f"HTTP {e.code} al intentar borrar huella"
-        except Exception as e:
-            ultimo_error = f"Error de conexión: {e}"
-
-    return False, ultimo_error
-
-
-def borrar_todas_huellas_sensor() -> tuple[bool, str]:
-    """Elimina TODAS las huellas almacenadas en el sensor de la Raspberry Pi.
-
-    Requiere que finger_server.py exponga GET /delete_all o GET /clear.
-    """
-    import urllib.request
-    import urllib.error
-    import json
-
-    base = _pifinger_url()
-    intentos = [
-        (f"{base}/delete_all", "GET"),
-        (f"{base}/clear", "GET"),
-        (f"{base}/remove_all", "GET"),
-        (f"{base}/reset", "GET"),
-    ]
-
-    ultimo_error = "El sensor no expone endpoint de borrado total. Añade /delete_all a finger_server.py."
-    for url, metodo in intentos:
-        try:
-            req = urllib.request.Request(url=url, method=metodo)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                crudo = resp.read().decode()
-            try:
-                datos = json.loads(crudo)
-            except json.JSONDecodeError:
-                datos = crudo
-
-            if isinstance(datos, dict):
-                resultado = str(datos.get("result", "")).upper()
-                if datos.get("ok") or resultado in {"OK", "PASS", "CLEARED", "DELETED"}:
-                    return True, "Todas las huellas eliminadas del sensor"
-                ultimo_error = str(datos.get("error", datos.get("result", "Error desconocido")))
-            else:
-                texto = str(datos).strip().upper()
-                if texto.startswith(("OK", "PASS", "CLEAR", "DELET")):
-                    return True, "Todas las huellas eliminadas del sensor"
-                ultimo_error = str(datos)
-
-        except urllib.error.HTTPError as e:
-            if e.code in {404, 405}:
-                continue
-            ultimo_error = f"HTTP {e.code} al intentar borrar todas las huellas"
-        except Exception as e:
-            ultimo_error = f"Error de conexión: {e}"
-
-    return False, ultimo_error

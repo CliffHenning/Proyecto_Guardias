@@ -1,7 +1,3 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-
 from datetime import datetime
 from modules.db.db_manager import DBManager
 from modules.db.models import Ausencia

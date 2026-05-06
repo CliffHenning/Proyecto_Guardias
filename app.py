@@ -5,15 +5,13 @@ from urllib.parse import urlparse
 
 from flask import Flask, render_template, redirect, request, url_for, flash
 
-from config import describir_hora, describir_horas, DEBUG_UI
+from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
 from modules.presencia.huella_service import (
     probar_conexion_raspberry,
     registrar_huella_profesor,
-    borrar_huella_sensor,
-    borrar_todas_huellas_sensor,
 )
 
 app = Flask(__name__)
@@ -267,7 +265,7 @@ def vista_presencia():
         for profesor_id, info in estado.items()
     ]
     profesores.sort(key=lambda p: p["nombre"].casefold())
-    return render_template("presencia.html", estado=estado, profesores=profesores, debug=DEBUG_UI)
+    return render_template("presencia.html", estado=estado, profesores=profesores)
 
 @app.route("/presencia/registrar", methods=["POST"])
 def registrar():
@@ -309,36 +307,6 @@ def enrolar_huella_profesor():
     except Exception as e:
         flash(f"Error al enrolar huella: {str(e)}", "error")
 
-    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
-
-
-@app.route("/presencia/borrar-huella-sensor", methods=["POST"])
-def borrar_huella_sensor_route():
-    destino = request.form.get("next") or request.args.get("next")
-    huella_id = request.form.get("huella_id", type=int)
-    if huella_id is None:
-        flash("Indica el ID de huella a borrar", "error")
-        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
-    try:
-        ok, mensaje = borrar_huella_sensor(huella_id)
-        flash(mensaje, "success" if ok else "error")
-    except Exception as e:
-        flash(f"Error al borrar huella: {e}", "error")
-    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
-
-
-@app.route("/presencia/borrar-todas-huellas-sensor", methods=["POST"])
-def borrar_todas_huellas_sensor_route():
-    destino = request.form.get("next") or request.args.get("next")
-    confirmacion = request.form.get("confirmacion", "").strip()
-    if confirmacion != "BORRAR":
-        flash("Escribe BORRAR en el campo de confirmación para proceder", "error")
-        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
-    try:
-        ok, mensaje = borrar_todas_huellas_sensor()
-        flash(mensaje, "success" if ok else "error")
-    except Exception as e:
-        flash(f"Error al borrar todas las huellas: {e}", "error")
     return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
 
 

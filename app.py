@@ -179,6 +179,127 @@ def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
         "guardias": guardias,
     }
 
+
+def obtener_datos_horario(fecha=None, db_path=None):
+    """Obtiene datos para mostrar el horario del día con ausencias."""
+    ahora = _obtener_ahora()
+    fecha = fecha or ahora.strftime("%Y-%m-%d")
+    db_path = db_path or _obtener_db_path()
+
+    try:
+        db_manager = DBManager(db_path)
+        dia_semana = datetime.strptime(fecha, "%Y-%m-%d").weekday()  # 0=Lunes, 6=Domingo
+
+        # Obtener profesores activos
+        profesores = db_manager.get_profesores()
+        profesores_activos = [p for p in profesores if p.activo == 1]
+
+        # Obtener horas del día
+        horas = list(range(1, 12))  # Horas 1-11
+
+        # Obtener horarios del día
+        horarios_dia = db_manager.get_horarios_by_dia(dia_semana)
+
+        # Obtener presencias y ausencias del día
+        presencias = db_manager.get_presencias_by_fecha(fecha)
+        ausencias = db_manager.get_ausencias_by_fecha(fecha)
+
+        # Crear mapa de ausencias por profesor y hora
+        ausencias_map = {}
+        for ausencia in ausencias:
+            ausencias_map[(ausencia.profesor_id, ausencia.hora)] = ausencia.motivo or "Ausencia registrada"
+
+        # Crear mapa de presencias por profesor
+        presencias_map = {}
+        for presencia in presencias:
+            if presencia.profesor_id not in presencias_map:
+                presencias_map[presencia.profesor_id] = []
+            presencias_map[presencia.profesor_id].append(presencia)
+
+        # Determinar estado de cada profesor en cada hora
+        celdas = {}
+        ausencias_totales = 0
+        for profesor in profesores_activos:
+            profesor_id = profesor.id
+            celdas[profesor_id] = {}
+
+            # Última presencia del día
+            presencias_profesor = sorted(
+                presencias_map.get(profesor_id, []),
+                key=lambda p: p.timestamp
+            )
+            ultima_presencia = presencias_profesor[-1] if presencias_profesor else None
+            presente_hoy = ultima_presencia and ultima_presencia.tipo == 'entrada'
+
+            for hora in horas:
+                horario = None
+                for h in horarios_dia:
+                    if h.profesor_id == profesor_id and h.hora == hora:
+                        horario = h
+                        break
+
+                if horario:
+                    ausente = (profesor_id, hora) in ausencias_map
+                    if ausente:
+                        ausencias_totales += 1
+                        motivo = ausencias_map[(profesor_id, hora)]
+                    else:
+                        motivo = ""
+
+                    celdas[profesor_id][hora] = {
+                        "tiene_horario": True,
+                        "tipo": horario.tipo_guardia or "clase",
+                        "asignatura": horario.asignatura or "Sin asignatura",
+                        "aula": horario.aula or "Sin aula",
+                        "ausente": ausente,
+                        "motivo": motivo,
+                    }
+                else:
+                    celdas[profesor_id][hora] = {
+                        "tiene_horario": False,
+                        "tipo": "",
+                        "asignatura": "",
+                        "aula": "",
+                        "ausente": False,
+                        "motivo": "",
+                    }
+
+        # Preparar lista de profesores para la vista
+        profesores_lista = [{
+            "id": p.id,
+            "nombre": p.nombre,
+            "departamento": getattr(p, 'departamento', 'Sin departamento')
+        } for p in profesores_activos]
+
+        # Preparar lista de horas
+        horas_lista = [{
+            "hora": h,
+            "hora_texto": describir_hora(h)
+        } for h in horas]
+
+        return {
+            "fecha": fecha,
+            "fecha_texto": _describir_fecha(fecha),
+            "dia_semana": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][dia_semana],
+            "profesores": profesores_lista,
+            "horas": horas_lista,
+            "celdas": celdas,
+            "ausencias_totales": ausencias_totales,
+        }
+
+    except Exception as e:
+        # En caso de error, devolver datos vacíos
+        return {
+            "fecha": fecha,
+            "fecha_texto": _describir_fecha(fecha),
+            "dia_semana": "Desconocido",
+            "profesores": [],
+            "horas": [],
+            "celdas": {},
+            "ausencias_totales": 0,
+        }
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -334,6 +455,13 @@ def borrar_huella_bd_route():
     except Exception as e:
         flash(f"Error al borrar huella de la BD: {e}", "error")
     return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+
+
+@app.route("/horario")
+def vista_horario():
+    fecha = request.args.get("fecha")
+    datos_horario = obtener_datos_horario(fecha=fecha)
+    return render_template("horario.html", datos=datos_horario)
 
 
 if __name__ == "__main__":

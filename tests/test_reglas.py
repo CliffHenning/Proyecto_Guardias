@@ -17,12 +17,12 @@ class StubDbManager:
 
 
 def test_describir_hora_devuelve_tramo_real_del_centro():
-    assert describir_hora(1) == "1 (8:45-9:45)"
+    assert describir_hora(1) == "1 (8:45-9:35)"
     assert describir_hora(11) == "11 (19:20-20:10)"
 
 
 def test_describir_horas_agrupa_varias_horas_ordenadas():
-    assert describir_horas([4, 1, 3]) == "1 (8:45-9:45), 3 (10:25-11:15), 4 (11:45-12:35)"
+    assert describir_horas([4, 1, 3]) == "1 (8:45-9:35), 3 (10:25-11:15), 4 (11:45-12:35)"
 
 
 def test_determinar_profesores_disponibles_requiere_tramo_de_guardia_y_excluye_guardia_de_la_carga():

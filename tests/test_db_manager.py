@@ -68,6 +68,32 @@ def test_set_profesor_huella_id_actualiza_valor(db_manager):
     assert actualizado.huella_id == 88
 
 
+def test_clear_all_huella_ids(db_manager):
+    profesor1 = db_manager.insert_profesor(Profesor(nombre="Profesor A", huella_id=5, activo=1))
+    profesor2 = db_manager.insert_profesor(Profesor(nombre="Profesor B", huella_id=7, activo=1))
+
+    filas = db_manager.clear_all_huella_ids()
+    actualizado1 = db_manager.get_profesor_by_id(profesor1.id)
+    actualizado2 = db_manager.get_profesor_by_id(profesor2.id)
+
+    assert filas == 2
+    assert actualizado1.huella_id is None
+    assert actualizado2.huella_id is None
+
+
+def test_set_profesor_huella_id_elimina_duplicado(db_manager):
+    profesor1 = db_manager.insert_profesor(Profesor(nombre="Profesor A", huella_id=5, activo=1))
+    profesor2 = db_manager.insert_profesor(Profesor(nombre="Profesor B", huella_id=5, activo=1))
+
+    filas = db_manager.set_profesor_huella_id(profesor2.id, 5)
+    actualizado1 = db_manager.get_profesor_by_id(profesor1.id)
+    actualizado2 = db_manager.get_profesor_by_id(profesor2.id)
+
+    assert filas == 1
+    assert actualizado1.huella_id is None
+    assert actualizado2.huella_id == 5
+
+
 def test_update_profesor(db_manager):
     profesor = db_manager.insert_profesor(Profesor(nombre="Pedro Sánchez", huella_id=44, activo=1))
     profesor.nombre = "Pedro Sánchez Updated"

@@ -126,6 +126,20 @@ def _delay_vinculacion_segundos() -> int:
     return max(0, segundos)
 
 
+def _extraer_id_de_resultado(texto):
+    if texto is None:
+        return None
+    texto = str(texto or "").strip()
+    if not texto:
+        return None
+
+    texto_upper = texto.upper()
+    match = re.search(r'^(?:PASS|OK|ENROLLED|ENROLADO)[_\s:|]*(\d+)', texto_upper)
+    if match:
+        return int(match.group(1))
+    return None
+
+
 def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
     """Normaliza respuestas JSON/texto del servidor de huellas.
 
@@ -159,6 +173,10 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
 
         if datos.get("ok") and ("huella_id" in datos or "id" in datos or "fingerprint_id" in datos):
             huella_id = int(datos.get("huella_id", datos.get("id", datos.get("fingerprint_id"))))
+            return huella_id, None
+
+        huella_id = _extraer_id_de_resultado(resultado)
+        if huella_id is not None:
             return huella_id, None
 
         # Soporta respuestas PiFinger como:
@@ -213,6 +231,10 @@ def _parsear_respuesta_enrolado(datos):
 
         resultado = str(datos.get("result", ""))
         resultado_upper = resultado.upper()
+
+        huella_id = _extraer_id_de_resultado(resultado)
+        if huella_id is not None:
+            return huella_id, None
 
         # Respuesta de registro tipo "Input fingerprint #7 for the first capture..."
         patron_registro = re.search(r'input fingerprint\s*#(\d+)', resultado, re.IGNORECASE)
@@ -470,7 +492,6 @@ def probar_conexion_raspberry(ip: str = "192.208.120", port: int = 5001, timeout
         print(f"FAIL: Error inesperado durante la prueba ({e}).")
         return False
 
-
 # ── Función principal ───────────────────────────────────────────────────────
 
 def identificar_huella():
@@ -608,6 +629,33 @@ def enrolar_huella_remota(profesor_id=None, huella_id_preferida=None):
         return None, f"Error preparando enrolado remoto: {ex}"
 
 
+def _verificar_id_enrolado(db_manager, profesor_id, huella_id, huella_id_preferida=None):
+    """Verifica si el ID devuelto tras el enrolado coincide con el ID real detectado."""
+    if huella_id is None:
+        return huella_id, None
+
+    print(
+        f"Verificando el ID de huella tras el enrolado (preferido={huella_id_preferida}, devuelto={huella_id})..."
+    )
+    detected_huella_id = _identificar_via_red(huella_ids_validos=None)
+    if detected_huella_id is None:
+        return huella_id, "No se pudo verificar el ID de huella tras el enrolado."
+
+    if detected_huella_id == huella_id:
+        return huella_id, None
+
+    profesor_existente = db_manager.get_profesor_por_huella_id(detected_huella_id)
+    if profesor_existente and profesor_existente.id != profesor_id:
+        return huella_id, (
+            f"Se detectó el ID {detected_huella_id} en el sensor, pero ya está asignado a {profesor_existente.nombre}."
+        )
+
+    db_manager.set_profesor_huella_id(profesor_id, detected_huella_id)
+    return detected_huella_id, (
+        f"ID de huella corregido a {detected_huella_id} tras verificar en el sensor."
+    )
+
+
 def registrar_huella_profesor(profesor_id, db_path="ies.db", huella_id_preferida=None):
     """Enrola huella en Raspberry Pi y guarda el huella_id en la base de datos."""
     db_manager = DBManager(db_path)
@@ -649,4 +697,11 @@ def registrar_huella_profesor(profesor_id, db_path="ies.db", huella_id_preferida
     if actualizados < 1:
         return False, "No se pudo guardar el ID de huella en la base de datos", None
 
-    return True, f"Huella registrada para {profesor.nombre}. ID: {huella_id}", huella_id
+    corrected_huella_id, correction_message = _verificar_id_enrolado(
+        db_manager, profesor_id, huella_id, huella_id_preferida=huella_id_preferida
+    )
+    final_message = f"Huella registrada para {profesor.nombre}. ID: {corrected_huella_id}"
+    if correction_message:
+        final_message += f" ({correction_message})"
+
+    return True, final_message, corrected_huella_id

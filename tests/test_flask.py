@@ -144,6 +144,9 @@ def test_ruta_horario_devuelve_200(monkeypatch, cliente):
             }
         },
         "ausencias_totales": 0,
+        "resumen": {"ausencias_detectadas": 0, "guardias_necesarias": 0, "guardias_cubiertas": 0},
+        "ranking_profesores": [],
+        "guardias": [],
     })
 
     respuesta = cliente.get("/horario")
@@ -161,8 +164,8 @@ def test_ruta_horario_marca_ausente_en_rojo(monkeypatch, cliente):
         "profesores": [{"id": 5, "nombre": "Profesor Ausente", "departamento": "Lengua"}],
         "horas": [{"hora": 2, "hora_texto": "2 (9:35-10:25)"}],
         "celdas": {
-            2: {
-                5: {
+            5: {
+                2: {
                     "tiene_horario": True,
                     "tipo": "clase",
                     "asignatura": "Lengua",
@@ -173,6 +176,9 @@ def test_ruta_horario_marca_ausente_en_rojo(monkeypatch, cliente):
             }
         },
         "ausencias_totales": 1,
+        "resumen": {"ausencias_detectadas": 1, "guardias_necesarias": 1, "guardias_cubiertas": 0},
+        "ranking_profesores": [],
+        "guardias": [],
     })
 
     respuesta = cliente.get("/horario")
@@ -241,7 +247,7 @@ def test_obtener_datos_guardias_no_retrocede_a_ultima_fecha_con_ausencias(monkey
         def __init__(self, db_path=None):
             self.db_manager = StubManager()
 
-        def detectar_ausencias_automaticas(self, ahora=None, margen_minutos=10):
+        def detectar_ausencias_automaticas(self, ahora=None, margen_minutos=10, hora_corte_global=None):
             return []
 
         def calcular_guardias(self, dia=None):

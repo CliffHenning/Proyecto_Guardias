@@ -206,13 +206,43 @@ class DBManager:
             model_cls=Profesor,
         )
 
-    def set_profesor_huella_id(self, profesor_id, huella_id):
-        """Asigna (o reemplaza) el huella_id de un profesor."""
-        huella_normalizada = self._normalizar_huella_id_valor(huella_id)
-        return self._execute_write(
-            "UPDATE profesores SET huella_id = ? WHERE id = ?",
-            (huella_normalizada, profesor_id),
+    def get_profesor_por_huella_id(self, huella_id):
+        """Obtiene un profesor por su huella_id."""
+        huella_id = self._normalizar_huella_id_valor(huella_id)
+        return self._fetch_one(
+            """
+            SELECT id, nombre, departamento, huella_id, activo, guardias_acumuladas, guardias_semana
+            FROM profesores WHERE huella_id = ?
+            """,
+            (huella_id,),
+            model_cls=Profesor,
         )
+
+    def set_profesor_huella_id(self, profesor_id, huella_id):
+        """Asigna (o reemplaza) el huella_id de un profesor.
+
+        Si se asigna un huella_id no nulo, limpia ese mismo huella_id de cualquier
+        otro profesor para evitar duplicados.
+        """
+        huella_normalizada = self._normalizar_huella_id_valor(huella_id)
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            if huella_normalizada is not None:
+                cursor.execute(
+                    "UPDATE profesores SET huella_id = NULL WHERE huella_id = ? AND id != ?",
+                    (huella_normalizada, profesor_id),
+                )
+            cursor.execute(
+                "UPDATE profesores SET huella_id = ? WHERE id = ?",
+                (huella_normalizada, profesor_id),
+            )
+            rowcount = cursor.rowcount
+            conn.commit()
+        return rowcount
+
+    def clear_all_huella_ids(self):
+        """Elimina todos los huella_id registrados en la base de datos."""
+        return self._execute_write("UPDATE profesores SET huella_id = NULL")
 
     def insert_profesor(self, profesor):
         """Inserta un nuevo profesor."""

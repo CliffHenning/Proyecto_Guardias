@@ -3,18 +3,21 @@ import os
 import sqlite3
 from urllib.parse import urlparse
 
-from flask import Flask, render_template, redirect, request, url_for, flash
-
+from flask import Flask, render_template, redirect, request, url_for, flash, jsonify, Blueprint
 from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
-from modules.presencia.registro import registrar_presencia, obtener_estado_actual, identificar_profesor
+from modules.db.models import Presencia
+from modules.presencia.registro import registrar_presencia, obtener_estado_actual
 from modules.presencia.huella_service import (
+    identificar_huella,
     probar_conexion_raspberry,
     registrar_huella_profesor,
 )
 
+
 app = Flask(__name__)
+bp = Blueprint("presencia", __name__, url_prefix="/presencia")
 app.secret_key = 'your_secret_key'  # Necesario para flash messages
 app.config.setdefault("DB_PATH", "ies.db")
 app.config.setdefault("AUSENCIA_MINUTOS_GRACIA", 10)
@@ -122,6 +125,25 @@ def _agrupar_ranking_por_profesor(ranking_profesores):
 
     return ranking_agrupado
 
+@bp.route("/")
+def vista_presencia():
+    try:
+        estado = obtener_estado_actual()
+
+        db = DBManager(_obtener_db_path())
+        profesores = db.get_profesores()
+        profesores = [p for p in profesores if p.activo == 1]
+
+    except Exception as e:
+        print(f"[ERROR estado presencia] {e}")
+        estado = {}
+        profesores = []
+
+    return render_template(
+        "presencia.html",
+        estado=estado,
+        profesores=profesores
+    )
 
 def obtener_datos_guardias(db_path=None, dia=None, ahora=None):
     ahora = ahora or _obtener_ahora()
@@ -349,64 +371,53 @@ def registrar_guardia():
     return redirect(url_for("vista_guardias", fecha=dia))
 
 
-@app.route("/guardias/registrar-huella", methods=["POST"])
-def registrar_huella_guardias():
-    fecha = request.form.get("fecha")
-    ip_raspberry, puerto_raspberry = _obtener_ip_y_puerto_raspberry()
+@bp.route("/confirmar-presencia-huella", methods=["POST"])
+def confirmar_presencia_huella():
+    db = DBManager()
 
-    if not probar_conexion_raspberry(ip=ip_raspberry, port=puerto_raspberry, timeout=10):
-        flash(
-            f"No hay conexión con Raspberry Pi ({ip_raspberry}:{puerto_raspberry}).",
-            "error",
-        )
-        return redirect(url_for("vista_guardias", fecha=fecha))
+    print("[HUELLA] Confirmando presencia automática...")
 
-    try:
-        profesor_id = identificar_profesor()
-        if profesor_id:
-            tipo = registrar_presencia(profesor_id, _obtener_db_path())
-            flash(f"Registro de {tipo} exitoso", "success")
-        else:
-            flash("Profesor no identificado", "error")
-    except ValueError as e:
-        flash(str(e), "error")
-    except Exception as e:
-        flash(f"Error al registrar presencia: {str(e)}", "error")
+    # 1. detectar huella desde sensor
+    huella_id = identificar_huella()
 
-    return redirect(url_for("vista_guardias", fecha=fecha))
+    if huella_id is None:
+        return jsonify({
+            "ok": False,
+            "mensaje": "No se detectó ninguna huella"
+        }), 400
 
-@app.route("/presencia")
-def vista_presencia():
-    estado = obtener_estado_actual(_obtener_db_path())
-    profesores = [
-        {
-            "id": profesor_id,
-            "nombre": info.get("nombre", f"Profesor {profesor_id}"),
-        }
-        for profesor_id, info in estado.items()
-    ]
-    profesores.sort(key=lambda p: p["nombre"].casefold())
-    return render_template("presencia.html", estado=estado, profesores=profesores)
+    print(f"[HUELLA] ID detectado: {huella_id}")
 
-@app.route("/presencia/registrar", methods=["POST"])
-def registrar():
-    destino = request.form.get("next") or request.args.get("next")
-    try:
-        profesor_id = request.form.get("profesor_id", type=int)
-        if profesor_id is None:
-            profesor_id = identificar_profesor()
-        if profesor_id:
-            tipo = registrar_presencia(profesor_id, _obtener_db_path())
-            flash(f"Registro de {tipo} exitoso", "success")
-        else:
-            flash("Profesor no identificado", "error")
-    except ValueError as e:
-        flash(str(e), "error")
-    except Exception as e:
-        flash(f"Error al registrar presencia: {str(e)}", "error")
+    # 2. buscar profesor por huella
+    profesor = db.get_profesor_por_huella_id(huella_id)
 
-    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+    if profesor is None:
+        return jsonify({
+            "ok": False,
+            "mensaje": f"Huella no registrada ({huella_id})"
+        }), 404
 
+    print(f"[HUELLA] Profesor encontrado: {profesor.nombre}")
+
+    # 3. registrar presencia automáticamente
+    presencia = Presencia(
+        profesor_id=profesor.id,
+        tipo="entrada"
+    )
+
+    db.insert_presencia(presencia)
+
+    print("[HUELLA] Presencia registrada correctamente")
+
+    # 4. respuesta final
+    return jsonify({
+        "ok": True,
+        "tipo": "entrada",
+        "nombre": profesor.nombre,
+        "profesor_id": profesor.id,
+        "huella_id": huella_id,
+        "mensaje": "Presencia registrada automáticamente"
+    })
 
 @app.route("/presencia/enrolar", methods=["POST"])
 def enrolar_huella_profesor():
@@ -437,7 +448,6 @@ def enrolar_huella_profesor():
 
     return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
 
-
 @app.route("/presencia/borrar-huella-bd", methods=["POST"])
 def borrar_huella_bd_route():
     destino = request.form.get("next") or request.args.get("next")
@@ -464,5 +474,8 @@ def vista_horario():
     return render_template("horario.html", datos=datos_horario)
 
 
+app.register_blueprint(bp)
+print(app.url_map)
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=False)

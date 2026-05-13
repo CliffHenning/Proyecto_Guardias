@@ -6,6 +6,7 @@ flask>=3.1.0
 
 # Comunicación serie (sensor de huella dactilar)
 pyserial>=3.5
+pyfingerprint>=1.2.0
 
 # Testing
 pytest>=7.0.0

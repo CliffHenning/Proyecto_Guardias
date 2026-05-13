@@ -1,17 +1,8 @@
-import os
-from modules.presencia.huella_service import identificar_huella
 from modules.db.db_manager import DBManager
 from modules.db.models import Presencia
 
-def identificar_profesor():
-    metodo = os.getenv("METODO_PRESENCIA", "huella")
-    if metodo == "huella":
-        return identificar_huella()
-    else:
-        raise ValueError(f"Método de presencia desconocido: {metodo}")
 
 def registrar_presencia(profesor_id, db_path="ies.db"):
-    """Registra entrada o salida del profesor."""
     db_manager = DBManager(db_path)
 
     ultima_presencia = db_manager.get_presencia_hoy(profesor_id)
@@ -31,17 +22,22 @@ def registrar_presencia(profesor_id, db_path="ies.db"):
 
     return tipo
 
+
 def obtener_estado_actual(db_path="ies.db"):
-    """Obtiene el estado actual de todos los profesores (presente/ausente)."""
     db_manager = DBManager(db_path)
     profesores = db_manager.get_profesores()
     presencias_hoy = db_manager.get_presencias_hoy()
 
     estado = {}
+
     for profesor in profesores:
-        presencias_profesor = sorted([p for p in presencias_hoy if p.profesor_id == profesor.id],
-                                   key=lambda p: p.timestamp)
+        presencias_profesor = sorted(
+            [p for p in presencias_hoy if p.profesor_id == profesor.id],
+            key=lambda p: p.timestamp
+        )
+
         presente = bool(presencias_profesor) and presencias_profesor[-1].tipo == 'entrada'
+
         estado[profesor.id] = {
             'nombre': profesor.nombre,
             'presente': presente,

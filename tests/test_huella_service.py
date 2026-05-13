@@ -175,3 +175,21 @@ def test_identificar_huella_limita_la_busqueda_a_huellas_registradas(monkeypatch
 
     assert profesor_id == 2
     assert recibido["ids"] == {12, 19}
+
+
+def test_identificar_huella_forza_serial_local(monkeypatch):
+    class FakeDBManager:
+        def __init__(self, _db_path="ies.db"):
+            pass
+
+        def get_profesores(self):
+            return [Profesor(id=1, nombre="Ana", huella_id=12, activo=1)]
+
+    monkeypatch.setattr(huella_service, "DBManager", FakeDBManager)
+    monkeypatch.setenv("PIFINGER_MODE", "local")
+    monkeypatch.setattr(huella_service, "_identificar_serial_local", lambda: 12)
+    monkeypatch.setattr(huella_service, "_identificar_via_red", lambda *args, **kwargs: None)
+
+    profesor_id = huella_service.identificar_huella()
+
+    assert profesor_id == 1

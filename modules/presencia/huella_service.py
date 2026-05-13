@@ -486,7 +486,7 @@ def probar_conexion_raspberry(ip: str = "192.208.120", port: int = 5001, timeout
 
     except urllib.error.URLError as e:
         print(f"FAIL: No se pudo conectar ({e}).")
-        print("Revise red, IP real de la Pi y que el servidor finger_server.py esté activo.")
+        print("Revise red, IP real de la Pi y que el servidor server.py esté activo.")
         return False
     except Exception as e:
         print(f"FAIL: Error inesperado durante la prueba ({e}).")

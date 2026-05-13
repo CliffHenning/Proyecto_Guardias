@@ -59,6 +59,19 @@ $env:METODO_PRESENCIA = "huella"
 
 Si no se define, el sistema usa `huella` como valor predeterminado.
 
+### Modo de identificación local para Raspberry Pi
+
+Si instalas y ejecutas la app directamente en la Raspberry Pi con un lector de huella compatible, puedes forzar el uso del sensor serie local:
+
+```bash
+# Usa el sensor serie local en lugar de depender de un servidor remoto
+$env:PIFINGER_MODE = "local"
+# o
+$env:PIFINGER_FORCE_LOCAL = "1"
+```
+
+Esto hace que la aplicación intente usar `pyfingerprint` y el puerto serie local antes de probar cualquier servidor remoto.
+
 ## Ejecutar los tests
 
 ```bash
@@ -112,3 +125,7 @@ proyecto_guardias/
 ## Notas sobre hardware
 
 El lector de huella utiliza comunicación serie y puede simularse en desarrollo introduciendo manualmente el identificador de huella. Los tests cubren las rutas principales sin necesidad de hardware físico.
+
+Si ejecutas la aplicación en la Raspberry Pi y tu sensor es compatible, instala `pyfingerprint` en la Pi y usa el modo local con `PIFINGER_MODE=local` o `PIFINGER_FORCE_LOCAL=1`.
+
+Si el módulo de huella no soporta matching interno, el servidor local debe usar una librería compatible con tu modelo de sensor y los comandos adecuados (`GenImg`, `Img2Tz`, `Search`, `Store`, etc.).

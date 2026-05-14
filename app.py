@@ -419,34 +419,33 @@ def confirmar_presencia_huella():
         "mensaje": "Presencia registrada automáticamente"
     })
 
-@app.route("/presencia/enrolar", methods=["POST"])
+@bp.route("/enrolar", methods=["POST"])
 def enrolar_huella_profesor():
-    destino = request.form.get("next") or request.args.get("next")
     profesor_id = request.form.get("profesor_id", type=int)
-    huella_id_preferida = request.form.get("huella_id_preferida", type=int)
 
     if profesor_id is None:
-        flash("Selecciona un profesor para registrar su huella", "error")
-        return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
-
-    # Si no se indica ID preferido, calcular el siguiente libre para evitar
-    # que el sensor asigne el slot 0/1 y colisione con huellas ya registradas.
-    if huella_id_preferida is None:
-        db = DBManager(_obtener_db_path())
-        ids_usados = [p.huella_id for p in db.get_profesores() if p.huella_id is not None]
-        huella_id_preferida = (max(ids_usados) + 1) if ids_usados else 1
+        return jsonify({
+            "ok": False,
+            "message": "Profesor no seleccionado"
+        }), 400
 
     try:
-        ok, mensaje, _huella_id = registrar_huella_profesor(
+        ok, mensaje, huella_id = registrar_huella_profesor(
             profesor_id,
-            db_path=_obtener_db_path(),
-            huella_id_preferida=huella_id_preferida,
+            db_path=_obtener_db_path()
         )
-        flash(mensaje, "success" if ok else "error")
-    except Exception as e:
-        flash(f"Error al enrolar huella: {str(e)}", "error")
 
-    return _redireccion_segura(destino, endpoint_fallback="vista_presencia")
+        return jsonify({
+            "ok": ok,
+            "message": mensaje,
+            "huella_id": huella_id
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "message": str(e)
+        }), 500
 
 @app.route("/presencia/borrar-huella-bd", methods=["POST"])
 def borrar_huella_bd_route():
@@ -475,7 +474,6 @@ def vista_horario():
 
 
 app.register_blueprint(bp)
-print(app.url_map)
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=True)

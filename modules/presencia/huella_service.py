@@ -150,12 +150,25 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
     if isinstance(datos, dict):
         resultado = datos.get("result")
 
-        # compare_fingerprint() devuelve True (boolean) — coincidencia sin ID
+        # match genérico del servidor
+        # OJO: algunos servidores devuelven ok=true/Matched!... con un PASS_<n> embebido.
+        # En ese caso, NO debemos retornar MATCH_SIN_ID sin intentar extraer el número.
         if resultado is True or datos.get("matched") is True or datos.get("ok") is True:
-            # Si hay un único ID registrado en la BD, es el único candidato posible
+            # Prioridad 1: extraer PASS_<n> del resultado (p.ej. "Matched!\n<R>PASS_0</R>")
+            # para obtener huella_id real.
+            resultado_raw = str(datos.get("raw", datos.get("result", "")) or "").strip()
+            if resultado_raw:
+                m_pass = re.search(r"PASS[_\s:|]*(\d+)", resultado_raw.upper())
+                if m_pass:
+                    return int(m_pass.group(1)), None
+
+            # Prioridad 2: si el sistema solo permite un candidato posible, usarlo.
             if huella_ids_validos and len(huella_ids_validos) == 1:
                 return next(iter(huella_ids_validos)), None
+
+            # Prioridad 3: match sin ID numérico explícito.
             return None, "MATCH_SIN_ID"
+
 
         resultado = str(resultado or "").strip()
         resultado_upper = resultado.upper()

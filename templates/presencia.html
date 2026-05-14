@@ -41,7 +41,7 @@
             <div class="collapse navbar-collapse" id="mainNav">
                 <div class="navbar-nav ms-auto gap-lg-2">
                     <a class="nav-link" href="{{ url_for('index') }}">Inicio</a>
-                    <a class="nav-link active fw-semibold" href="{{ url_for('presencia.vista_presencia') }}">Presencia</a>
+                    <a class="nav-link" href="{{ url_for('presencia.vista_presencia') }}">Presencia</a>
                     <a class="nav-link" href="{{ url_for('vista_guardias') }}">Guardias</a>
                 </div>
             </div>
@@ -58,40 +58,70 @@
             </div>
         </section>
 
-        <!-- NUEVA SECCIÓN: Confirmación de Presencia con Sensor -->
+        <!-- ========================= -->
+        <!-- SECCIÓN BOTONES HUELLA -->
+        <!-- ========================= -->
         <section class="card stat-card mb-4">
             <div class="card-body p-4">
                 <div class="row g-4 align-items-center">
+
+                    <!-- IZQUIERDA -->
                     <div class="col-lg-5">
                         <div class="d-flex align-items-center gap-3 mb-2">
-                            <div class="rounded-3 p-2 bg-primary bg-opacity-10 text-primary lh-1" style="font-size:1.75rem">
+                            <div class="rounded-3 p-2 bg-primary bg-opacity-10 text-primary lh-1"
+                                style="font-size:1.75rem">
                                 <i class="bi bi-fingerprint"></i>
                             </div>
-                            <h2 class="h4 mb-0">Confirmar Presencia</h2>
+                            <h2 class="h4 mb-0">Control de huella</h2>
                         </div>
+
                         <p class="text-secondary small mb-0 mt-2">
-                            Selecciona tu nombre y coloca el dedo en el sensor para registrar tu entrada o salida del centro.
+                            Registra o verifica profesores usando el sensor de huellas.
                         </p>
                     </div>
+
+                    <!-- DERECHA -->
                     <div class="col-lg-7">
-                        <form id="form-confirmar-presencia" action="{{ url_for('presencia.confirmar_presencia_huella') }}" method="post" class="d-grid gap-3">
-                            <input type="hidden" name="next" value="{{ request.path }}">
+
+                        <div class="d-grid gap-3">
+
+                            <!-- SELECT PROFESOR -->
                             <div>
-                                <label for="profesor_id_huella" class="form-label fw-medium">Selecciona un profesor</label>
-                                <select id="profesor_id_huella" name="profesor_id" class="form-select form-select-lg" required>
-                                    <option value="" selected disabled>Seleccionar profesor…</option>
+                                <label class="form-label fw-medium">Profesor</label>
+
+                                <select id="selectProfesor"
+                                        class="form-select form-select-lg">
+                                    <option value="" disabled selected>Seleccionar profesor…</option>
+
                                     {% for profesor in profesores %}
-                                    <option value="{{ profesor.id }}">{{ profesor.nombre }}</option>
+                                        <option value="{{ profesor.id }}">
+                                            {{ profesor.nombre }}
+                                        </option>
                                     {% endfor %}
                                 </select>
-                                {% if not profesores %}
-                                <p class="form-text text-danger mt-1"><i class="bi bi-exclamation-circle me-1"></i>No hay profesores disponibles.</p>
-                                {% endif %}
                             </div>
-                            <button id="btn-confirmar-huella" class="btn btn-primary btn-lg" type="submit" {% if not profesores %}disabled{% endif %}>
-                                <i class="bi bi-hand-index me-2"></i>Confirmar con huella
-                            </button>
-                        </form>
+
+                            <!-- BOTONES -->
+                            <div class="d-flex gap-2">
+
+                                <button id="btnRegistrar"
+                                        class="btn btn-warning btn-lg w-50"
+                                        type="button">
+                                    <i class="bi bi-person-plus me-2"></i>
+                                    Registrar
+                                </button>
+
+                                <button id="btnScan"
+                                        class="btn btn-primary btn-lg w-50"
+                                        type="button">
+                                    <i class="bi bi-fingerprint me-2"></i>
+                                    Escanear
+                                </button>
+
+                            </div>
+
+                        </div>
+
                     </div>
                 </div>
             </div>
@@ -214,94 +244,118 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     <script>
         (function () {
-            // NUEVO: Manejar form-confirmar-presencia con AJAX
-            const formConfirmar = document.getElementById("form-confirmar-presencia");
-            const btnConfirmar = document.getElementById("btn-confirmar-huella");
-            const secondsEl = document.getElementById("scanDelaySeconds");
-            const cancelBtn = document.getElementById("cancelScanDelayBtn");
-            const delayModalEl = document.getElementById("scanDelayModal");
-            const delayTitleEl = document.getElementById("scanDelayModalLabel");
-            const delayBodyTextEl = delayModalEl ? delayModalEl.querySelector(".modal-body p.mb-2") : null;
-            const resultadoModalEl = document.getElementById("resultadoRegistroModal");
-            const resultadoTitleEl = document.getElementById("resultadoRegistroModalLabel");
-            const resultadoBodyEl = document.getElementById("resultadoRegistroModalBody");
 
-            let scanDelayInterval = null;
-            let envioEnCurso = false;
+            const API_BASE = ""; // no se usa: usamos rutas del propio backend
 
-            if (delayModalEl && resultadoModalEl) {
-                const delayModal = new bootstrap.Modal(delayModalEl);
-                const resultadoModal = new bootstrap.Modal(resultadoModalEl);
+            // =========================
+            // ELEMENTOS HTML
+            // =========================
+// Nota: los ids reales en el HTML son selectProfesor / btnRegistrar / btnScan.
+            const selectProfesor = document.getElementById("selectProfesor");
+            const btnRegistrar = document.getElementById("btnRegistrar");
+            const btnScan = document.getElementById("btnScan");
 
-                const iniciarConfirmacionHuella = function (event) {
-                    if (envioEnCurso) {
-                        return;
-                    }
 
-                    event.preventDefault();
-                    
-                    const profesorId = document.getElementById("profesor_id_huella").value;
-                    if (!profesorId) {
-                        alert("Debes seleccionar un profesor");
-                        return;
-                    }
+            const modalEl = document.getElementById("resultadoRegistroModal");
+            const modalTitle = document.getElementById("resultadoRegistroModalLabel");
+            const modalBody = document.getElementById("resultadoRegistroModalBody");
 
-                    let segundos = 10;
-                    secondsEl.textContent = String(segundos);
-                    delayTitleEl.textContent = "Leyendo huella...";
-                    delayBodyTextEl.textContent = "Coloca el dedo en el sensor y mantenlo durante los 10 segundos.";
-                    btnConfirmar.disabled = true;
-                    delayModal.show();
+            const modal = new bootstrap.Modal(modalEl);
 
-                    envioEnCurso = true;
+            let busy = false;
 
-                    scanDelayInterval = window.setInterval(function () {
-                        segundos -= 1;
-                        secondsEl.textContent = String(Math.max(segundos, 0));
+            // =========================
+            // FUNCION UTIL: MOSTRAR MODAL
+            // =========================
+            function showModal(title, message) {
+                modalTitle.textContent = title;
+                modalBody.textContent = message;
+                modal.show();
+            }
 
-                        if (segundos <= 0) {
-                            window.clearInterval(scanDelayInterval);
-                            scanDelayInterval = null;
-                        }
-                    }, 1000);
+            // =========================
+            // REGISTRAR HUELLA (API /register)
+            // =========================
+            btnRegistrar.addEventListener("click", async () => {
+                console.log('[UI] Pulsado Registrar');
 
-                    // Enviar AJAX al servidor
-                    const formData = new FormData(formConfirmar);
-                    
-                    fetch("{{ url_for('presencia.confirmar_presencia_huella') }}", {
-                        method: "POST",
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        delayModal.hide();
-                        resultadoTitleEl.textContent = data.ok ? "Éxito" : "Error";
-                        resultadoBodyEl.textContent = data.mensaje || data.error || "Respuesta del servidor";
-                        resultadoModal.show();
-                        btnConfirmar.disabled = false;
-                        envioEnCurso = false;
-                    })
-                    .catch(error => {
-                        delayModal.hide();
-                        resultadoTitleEl.textContent = "Error de comunicación";
-                        resultadoBodyEl.textContent = error.toString();
-                        resultadoModal.show();
-                        btnConfirmar.disabled = false;
-                        envioEnCurso = false;
-                    });
-                };
+                if (busy) return;
 
-                if (formConfirmar && btnConfirmar) {
-                    formConfirmar.addEventListener("submit", iniciarConfirmacionHuella);
+                const profesorId = selectProfesor.value;
+
+                if (!profesorId) {
+                    alert("Selecciona un profesor primero");
+                    return;
                 }
 
-                cancelBtn.addEventListener("click", function () {
-                    if (scanDelayInterval) {
-                        window.clearInterval(scanDelayInterval);
-                        scanDelayInterval = null;
-                    }
+                const body = new URLSearchParams({
+                    profesor_id: profesorId,
                 });
-            }
+
+
+
+                busy = true;
+                btnRegistrar.disabled = true;
+
+                try {
+                    showModal("Registrando huella...", "Coloca el dedo en el sensor");
+                    console.log('[UI] Request enrolar ->', `${window.location.origin}/presencia/enrolar`, 'body=', body.toString());
+
+                    const res = await fetch(`${window.location.origin}/presencia/enrolar`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+                        body,
+                    });
+
+                    const data = await res.json();
+
+                    if (data.ok) {
+                        showModal("Registro correcto", data.message || `Huella registrada para el profesor. ID ${data.huella_id}`);
+                    } else {
+                        showModal("Error", data.error || data.message || "Fallo en el registro");
+                    }
+
+                } catch (err) {
+                    showModal("Error", err.toString());
+                } finally {
+                    btnRegistrar.disabled = false;
+                    busy = false;
+                }
+            });
+
+
+            // =========================
+            // ESCANEAR HUELLA (API /scan)
+            // =========================
+            btnScan.addEventListener("click", async () => {
+
+                if (busy) return;
+
+                busy = true;
+                btnScan.disabled = true;
+
+                try {
+                    showModal("Escaneando huella...", "Coloca el dedo en el sensor");
+
+                    const res = await fetch(`${window.location.origin}/presencia/confirmar-presencia-huella`, {
+                        method: "POST",
+                    });
+                    const data = await res.json();
+
+                    if (data.ok) {
+                        showModal("Acceso permitido", data.mensaje || data.message || "Profesor reconocido");
+                    } else {
+                        showModal("Acceso denegado", data.mensaje || data.message || data.error || "No reconocido");
+                    }
+
+                } catch (err) {
+                    showModal("Error", err.toString());
+                } finally {
+                    btnScan.disabled = false;
+                    busy = false;
+                }
+            });
+
         })();
     </script>
 </body>

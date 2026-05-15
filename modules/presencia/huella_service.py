@@ -140,6 +140,42 @@ def _extraer_id_de_resultado(texto):
     return None
 
 
+def _extraer_slot_de_resultado(valor):
+    """Extrae el slot real del sensor: 0, "#0", "slot 0", "PASS_0", etc."""
+    if valor is None or isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor
+
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+
+    if texto.isdigit():
+        return int(texto)
+
+    for patron in (
+        r"#\s*(\d+)",
+        r"\bslot(?:_id)?\b[\s:=#-]*(\d+)",
+        r"\b(?:huella_id|fingerprint_id|id)\b[\s:=#-]*(\d+)",
+    ):
+        match = re.search(patron, texto, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+
+    return _extraer_id_de_resultado(texto)
+
+
+def _texto_sensor(valor):
+    if valor is None:
+        return ""
+    if isinstance(valor, (list, tuple)):
+        return "\n".join(_texto_sensor(item) for item in valor)
+    if isinstance(valor, dict):
+        return "\n".join(_texto_sensor(item) for item in valor.values())
+    return str(valor or "")
+
+
 def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
     """Normaliza respuestas JSON/texto del servidor de huellas.
 
@@ -149,6 +185,23 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
     """
     if isinstance(datos, dict):
         resultado = datos.get("result")
+        texto_completo = _texto_sensor(
+            [datos.get("result"), datos.get("raw"), datos.get("message"), datos.get("error")]
+        )
+        texto_completo_upper = texto_completo.upper()
+        texto_completo_lower = texto_completo.lower()
+
+        patron_pass_completo = re.search(r"PASS[_\s:|]*(\d+)", texto_completo_upper)
+        if patron_pass_completo:
+            return int(patron_pass_completo.group(1)), None
+
+        if (
+            "please input fingerprint to compare" in texto_completo_lower
+            or "input fingerprint" in texto_completo_lower
+            or "move finger away" in texto_completo_lower
+            or "cancel" in texto_completo_lower
+        ):
+            return None, "NO_DATA"
 
         # match genérico del servidor
         # OJO: algunos servidores devuelven ok=true/Matched!... con un PASS_<n> embebido.
@@ -184,11 +237,12 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
         if "input fingerprint" in resultado_lower or "move finger away" in resultado_lower:
             return None, "NO_DATA"
 
-        if datos.get("ok") and ("huella_id" in datos or "id" in datos or "fingerprint_id" in datos):
-            huella_id = int(datos.get("huella_id", datos.get("id", datos.get("fingerprint_id"))))
-            return huella_id, None
+        for clave in ("slot", "slot_id", "huella_id", "id", "fingerprint_id"):
+            huella_id = _extraer_slot_de_resultado(datos.get(clave))
+            if huella_id is not None:
+                return huella_id, None
 
-        huella_id = _extraer_id_de_resultado(resultado)
+        huella_id = _extraer_slot_de_resultado(resultado)
         if huella_id is not None:
             return huella_id, None
 
@@ -204,8 +258,14 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
                 return huella_id, None
             return None, "El servidor devolvio PASS, pero sin ID de huella."
 
-        if datos.get("ok") is False or "FAIL" in resultado_upper:
-            return None, str(datos.get("error", datos.get("result", "FAIL")))
+        if (
+            datos.get("ok") is False
+            or "FAIL" in resultado_upper
+            or "FAIL" in texto_completo_upper
+            or "MISMATCH" in texto_completo_upper
+            or "NO COINCIDE" in texto_completo_upper
+        ):
+            return None, "NO_MATCH"
 
         return None, f"Respuesta inesperada: {datos}"
 
@@ -228,7 +288,9 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
             return int(patron_pass.group(1)), None
         return None, "Respuesta PASS sin ID numerico."
     if texto_upper.startswith("FAIL"):
-        return None, texto
+        return None, "NO_MATCH"
+    if "MISMATCH" in texto_upper or "NO COINCIDE" in texto_upper:
+        return None, "NO_MATCH"
     return None, f"Respuesta no reconocida: {texto}"
 
 
@@ -238,14 +300,15 @@ def _parsear_respuesta_enrolado(datos):
         if str(datos.get("result", "")).strip().lower() in {"no data", "no_data", "waiting"}:
             return None, "NO_DATA"
 
-        if datos.get("ok") and ("huella_id" in datos or "id" in datos or "fingerprint_id" in datos):
-            huella_id = int(datos.get("huella_id", datos.get("id", datos.get("fingerprint_id"))))
-            return huella_id, None
+        for clave in ("slot", "slot_id", "huella_id", "id", "fingerprint_id"):
+            huella_id = _extraer_slot_de_resultado(datos.get(clave))
+            if huella_id is not None:
+                return huella_id, None
 
         resultado = str(datos.get("result", ""))
         resultado_upper = resultado.upper()
 
-        huella_id = _extraer_id_de_resultado(resultado)
+        huella_id = _extraer_slot_de_resultado(resultado)
         if huella_id is not None:
             return huella_id, None
 
@@ -268,9 +331,9 @@ def _parsear_respuesta_enrolado(datos):
     texto = str(datos or "").strip()
     texto_upper = texto.upper()
     # Respuesta de registro en texto plano
-    patron_registro_txt = re.search(r'input fingerprint\s*#(\d+)', texto, re.IGNORECASE)
-    if patron_registro_txt:
-        return int(patron_registro_txt.group(1)), None
+    huella_id = _extraer_slot_de_resultado(texto)
+    if huella_id is not None:
+        return huella_id, None
     if texto_upper.startswith(("PASS", "OK", "ENROLLED", "ENROLADO")):
         partes = texto.replace(":", " ").replace("|", " ").split()
         for parte in partes[1:]:
@@ -351,24 +414,39 @@ def _identificar_via_red(huella_ids_validos=None) -> int | None:
                     huella_id, mensaje = _parsear_respuesta_identificacion(datos, huella_ids_validos)
                     print(f"[DEBUG] Parser → huella_id={huella_id}, mensaje={mensaje}")
                     if huella_id is not None:
-                        if huella_ids_validos is not None and huella_id not in huella_ids_validos:
-                            print(
-                                f"Huella detectada. ID={huella_id} ignorado por no estar registrada en la base local."
-                            )
-                            ruta_activa = ruta
-                            metodo_activo = metodo
-                            _RUTA_IDENTIFICACION_CACHE = ruta
-                            _METODO_IDENTIFICACION_CACHE = metodo
-                            hubo_espera_sensor = True
-                            break
-                        print(f"Huella detectada. ID={huella_id}")
-                        return huella_id
-                    if mensaje == "NO_DATA" or mensaje == "MATCH_SIN_ID":
+                        # Normalizar tipos por seguridad (int vs str)
+                        try:
+                            huella_id_int = int(huella_id)
+                        except (TypeError, ValueError):
+                            huella_id_int = None
+
+                        if huella_id_int is None:
+                            ultimo_error = f"ID de huella invalido: {huella_id}"
+                            continue
+
+                        if huella_ids_validos is not None:
+                            ids_locales = {int(x) for x in huella_ids_validos}
+                            if huella_id_int not in ids_locales:
+                                print(
+                                    f"Huella detectada. ID={huella_id_int} ignorado por no estar registrada en la base local."
+                                )
+                                ruta_activa = ruta
+                                metodo_activo = metodo
+                                _RUTA_IDENTIFICACION_CACHE = ruta
+                                _METODO_IDENTIFICACION_CACHE = metodo
+                                hubo_espera_sensor = True
+                                break
+
+                        print(f"Huella detectada. ID={huella_id_int}")
+                        return huella_id_int
+                    if mensaje in {"NO_DATA", "MATCH_SIN_ID", "NO_MATCH"}:
                         ruta_activa = ruta
                         metodo_activo = metodo
                         _RUTA_IDENTIFICACION_CACHE = ruta
                         _METODO_IDENTIFICACION_CACHE = metodo
                         hubo_espera_sensor = True
+                        if mensaje == "NO_MATCH":
+                            ultimo_error = "No coincide ninguna huella registrada durante la ventana de lectura."
                         break
                     if mensaje:
                         if str(mensaje).upper().startswith("FAIL"):
@@ -507,7 +585,62 @@ def probar_conexion_raspberry(ip: str = "192.208.120", port: int = 5001, timeout
 
 # ── Función principal ───────────────────────────────────────────────────────
 
-def identificar_huella():
+def borrar_huellas_remotas():
+    """Solicita al servidor PiFinger borrar las huellas almacenadas en el sensor."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    rutas = ["/delete_all", "/clear", "/reset", "/borrar_huellas"]
+    ultimo_error = None
+
+    for ruta in rutas:
+        url = f"{_pifinger_url()}{ruta}"
+        try:
+            req = urllib.request.Request(url=url, method="POST")
+            with urllib.request.urlopen(req, timeout=_timeout_lectura_red()) as resp:
+                crudo = resp.read().decode(errors="ignore")
+
+            try:
+                datos = json.loads(crudo)
+            except json.JSONDecodeError:
+                datos = crudo
+
+            if isinstance(datos, dict):
+                ok = datos.get("ok") is True or str(datos.get("result", "")).upper() == "OK"
+                if ok:
+                    return True, "Se borraron las huellas del sensor."
+                ultimo_error = datos.get("error") or datos.get("message") or str(datos)
+            elif "OK" in str(datos).upper() or "PASS" in str(datos).upper():
+                return True, "Se borraron las huellas del sensor."
+            else:
+                ultimo_error = str(datos)
+
+        except urllib.error.HTTPError as http_error:
+            if http_error.code in {404, 405}:
+                ultimo_error = f"Ruta/metodo no disponible: {ruta}"
+                continue
+            ultimo_error = f"HTTP {http_error.code} al borrar huellas"
+        except Exception as ex:
+            ultimo_error = str(ex)
+
+    return False, ultimo_error or "No se pudieron borrar las huellas del sensor."
+
+
+def _siguiente_slot_libre(profesores, limite=128):
+    usados = {
+        int(profesor.huella_id)
+        for profesor in profesores
+        if profesor.huella_id is not None
+    }
+    for slot in range(limite):
+        if slot not in usados:
+            return slot
+    return None
+
+
+def identificar_huella(db_path: str = "ies.db"):
+
     """
     Identifica al profesor mediante huella dactilar.
 
@@ -521,15 +654,26 @@ def identificar_huella():
       PIFINGER_PORT  Puerto serial en Linux, por defecto /dev/ttyAMA0
       ALLOW_MANUAL_HUELLA  1 para habilitar fallback manual de ID
     """
-    db_manager = DBManager()
+    print(f"[HUELLA][DEBUG] DB_PATH usado en identificar_huella: {db_path}")
+    db_manager = DBManager(db_path)
     profesores = db_manager.get_profesores()
     huella_ids_registrados = {
-        profesor.huella_id for profesor in profesores if profesor.huella_id is not None
+        int(profesor.huella_id) for profesor in profesores if profesor.huella_id is not None
     }
+    print(
+        f"[HUELLA][DEBUG] Profesores activos leidos: {len(profesores)}; "
+        f"huella_ids validos: {sorted(huella_ids_registrados)}"
+    )
+    if not huella_ids_registrados:
+        print(
+            "[HUELLA][DEBUG] La BD no devolvio huella_id activos. "
+            f"Revise DB_PATH={db_path} y que profesores.huella_id no este vacio."
+        )
 
     # Flujo principal: comparar huella en memoria del sensor remoto (Raspberry Pi)
+    # Importante: no pasar None para evitar saltos silenciosos en la validación.
     huella_id = _identificar_via_red(
-        huella_ids_validos=huella_ids_registrados if huella_ids_registrados else None
+        huella_ids_validos=huella_ids_registrados
     )
 
     # Fallback 1: si la app corre en la propia Raspberry, intentar serial local
@@ -546,175 +690,103 @@ def identificar_huella():
             print("Para pruebas manuales, establezca ALLOW_MANUAL_HUELLA=1.")
         return None
 
-    for profesor in profesores:
-        if profesor.huella_id == huella_id:
-            print(f"Profesor identificado: {profesor.nombre}")
-            return profesor.id
+    profesor = db_manager.get_profesor_por_huella_id(huella_id)
+    if profesor is not None:
+        print(f"Profesor identificado: {profesor.nombre} (huella_id={huella_id})")
+        return int(huella_id)
 
     print(f"Huella no registrada: ID {huella_id}")
     return None
 
 
-def enrolar_huella_remota(profesor_id=None, huella_id_preferida=None):
-    """Solicita al servidor de la Raspberry el alta de una nueva huella."""
+def enrolar_huella_remota(profesor_id=None, huella_id_preferida=None, db_path: str = "ies.db"):
+
+    """Alta simplificada: el PiFinger expone /register/<nombre> en GET."""
+    if profesor_id is None:
+        return None, "Profesor no proporcionado"
+
+    db_manager = DBManager(db_path)
+    profesor = db_manager.get_profesor_by_id(int(profesor_id))
+    if profesor is None:
+        return None, "Profesor no encontrado"
+
+    import json
+    import urllib.error
+    import urllib.request
+    from urllib.parse import quote, urlencode
+
+    url = f"{_pifinger_url()}/register/{quote(str(profesor.nombre))}"
+    if huella_id_preferida is not None:
+        url = f"{url}?{urlencode({'slot': int(huella_id_preferida)})}"
     try:
-        import json
-        import urllib.error
-        import urllib.request
-
         timeout = _timeout_enrolado_red()
-        rutas = _rutas_enrolado()
-        metodos = _metodos_enrolado()
-        payload = {}
-        if profesor_id is not None:
-            payload["profesor_id"] = int(profesor_id)
-        if huella_id_preferida is not None:
-            payload["huella_id"] = int(huella_id_preferida)
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            crudo = resp.read().decode(errors="ignore")
 
-        ultimo_error = "No se encontró un endpoint de enrolado válido en la Raspberry Pi."
-        rutas_no_disponibles = 0
-        total_intentos = 0
+        try:
+            datos = json.loads(crudo)
+        except json.JSONDecodeError:
+            datos = crudo
 
-        print(f"Iniciando enrolado de huella (timeout: {timeout}s)...")
-        for ruta in rutas:
-            url = f"{_pifinger_url()}{ruta}"
-            for metodo in metodos:
-                total_intentos += 1
-                try:
-                    if metodo == "POST":
-                        data = json.dumps(payload).encode("utf-8")
-                        req = urllib.request.Request(
-                            url=url,
-                            data=data,
-                            method="POST",
-                            headers={"Content-Type": "application/json"},
-                        )
-                    else:
-                        query = ""
-                        if payload:
-                            query = "?" + "&".join(f"{k}={v}" for k, v in payload.items())
-                        req = urllib.request.Request(url=f"{url}{query}", method="GET")
+        huella_id, error = _parsear_respuesta_enrolado(datos)
+        if huella_id is not None:
+            return int(huella_id), None
 
-                    print(f"Conectando con servidor de huellas: {url} [{metodo}]")
-                    with urllib.request.urlopen(req, timeout=timeout) as resp:
-                        crudo = resp.read().decode()
+        if isinstance(datos, dict) and datos.get("ok") is True:
+            return None, f"Alta OK pero sin slot en respuesta: {datos}"
 
-                    try:
-                        datos = json.loads(crudo)
-                    except json.JSONDecodeError:
-                        datos = crudo
+        # error conocido
+        if isinstance(datos, dict):
+            return None, datos.get("error") or datos.get("message") or error or str(datos)
 
-                    huella_id, mensaje = _parsear_respuesta_enrolado(datos)
-                    if huella_id is not None:
-                        global _RUTA_ENROLADO_CACHE, _METODO_ENROLADO_CACHE
-                        _RUTA_ENROLADO_CACHE = ruta
-                        _METODO_ENROLADO_CACHE = metodo
-                        print(f"Alta de huella completada. ID={huella_id}")
-                        return huella_id, None
+        return None, error or str(datos)
 
-                    if mensaje and mensaje != "NO_DATA":
-                        ultimo_error = f"{mensaje} en {ruta} [{metodo}]"
-
-                except urllib.error.HTTPError as http_error:
-                    if http_error.code in {404, 405}:
-                        rutas_no_disponibles += 1
-                        ultimo_error = f"Ruta/metodo no disponible: {ruta} [{metodo}]"
-                        continue
-                    try:
-                        detalle = http_error.read().decode(errors="ignore").strip()
-                    except Exception:
-                        detalle = ""
-                    ultimo_error = f"HTTP {http_error.code} en {ruta} [{metodo}] {detalle}".strip()
-                except urllib.error.URLError as net_error:
-                    ultimo_error = f"No se pudo conectar con {_pifinger_url()}: {net_error}"
-                except Exception as ex:
-                    ultimo_error = f"Error inesperado en enrolado: {ex}"
-
-        if total_intentos > 0 and rutas_no_disponibles == total_intentos:
-            return None, (
-                "El servidor de huellas no expone endpoint de alta. "
-                "Configura PIFINGER_ENROLL_PATH/PIFINGER_ENROLL_METHOD con la ruta real "
-                "o usa la vinculación por huella existente."
-            )
-
-        return None, ultimo_error
+    except urllib.error.HTTPError as ex:
+        try:
+            detalle = ex.read().decode(errors="ignore").strip()
+        except Exception:
+            detalle = ""
+        mensaje = f"HTTP {ex.code} llamando a endpoint /register/<nombre>"
+        if detalle:
+            mensaje = f"{mensaje}: {detalle}"
+        return None, mensaje
     except Exception as ex:
-        return None, f"Error preparando enrolado remoto: {ex}"
+        return None, f"Error llamando a endpoint /register/<nombre>: {ex}"
 
-
-def _verificar_id_enrolado(db_manager, profesor_id, huella_id, huella_id_preferida=None):
-    """Verifica si el ID devuelto tras el enrolado coincide con el ID real detectado."""
-    if huella_id is None:
-        return huella_id, None
-
-    print(
-        f"Verificando el ID de huella tras el enrolado (preferido={huella_id_preferida}, devuelto={huella_id})..."
-    )
-    detected_huella_id = _identificar_via_red(huella_ids_validos=None)
-    if detected_huella_id is None:
-        return huella_id, "No se pudo verificar el ID de huella tras el enrolado."
-
-    if detected_huella_id == huella_id:
-        return huella_id, None
-
-    profesor_existente = db_manager.get_profesor_por_huella_id(detected_huella_id)
-    if profesor_existente and profesor_existente.id != profesor_id:
-        return huella_id, (
-            f"Se detectó el ID {detected_huella_id} en el sensor, pero ya está asignado a {profesor_existente.nombre}."
-        )
-
-    db_manager.set_profesor_huella_id(profesor_id, detected_huella_id)
-    return detected_huella_id, (
-        f"ID de huella corregido a {detected_huella_id} tras verificar en el sensor."
-    )
 
 
 def registrar_huella_profesor(profesor_id, db_path="ies.db", huella_id_preferida=None):
+
     """Enrola huella en Raspberry Pi y guarda el huella_id en la base de datos."""
     db_manager = DBManager(db_path)
     profesor = db_manager.get_profesor_by_id(profesor_id)
     if profesor is None:
         return False, "Profesor no encontrado", None
 
+    if huella_id_preferida is None:
+        huella_id_preferida = _siguiente_slot_libre(db_manager.get_profesores())
+    if huella_id_preferida is None:
+        return False, "No quedan slots libres de huella en la base de datos", None
+
     huella_id, error = enrolar_huella_remota(
         profesor_id=profesor_id,
         huella_id_preferida=huella_id_preferida,
+        db_path=db_path,
     )
 
-    # Fallback: algunos servidores PiFinger solo exponen /scan (identificación),
-    # no alta remota. En ese caso vinculamos una huella ya existente al profesor.
-    if huella_id is None and error and "no expone endpoint de alta" in error.lower():
-        import time
-        espera = _delay_vinculacion_segundos()
-        if espera > 0:
-            print(f"Esperando {espera}s antes de leer huella para vinculación...")
-            time.sleep(espera)
-        huella_id = _identificar_via_red()
-        if huella_id is None:
-            return False, (
-                "No hay endpoint de alta y tampoco se detectó una huella existente para vincular."
-            ), None
-
-        actualizados = db_manager.set_profesor_huella_id(profesor_id, huella_id)
-        if actualizados < 1:
-            return False, "No se pudo guardar el ID de huella en la base de datos", None
-
-        return True, (
-            f"Servidor sin alta remota. Se vinculó la huella existente ID {huella_id} a {profesor.nombre}."
-        ), huella_id
-
+    # IMPORTANTE: para evitar escaneos adicionales durante el registro,
+    # no hacemos fallback por vinculación vía /scan.
     if huella_id is None:
         return False, error or "No se pudo completar el enrolado de huella", None
+
 
     actualizados = db_manager.set_profesor_huella_id(profesor_id, huella_id)
     if actualizados < 1:
         return False, "No se pudo guardar el ID de huella en la base de datos", None
 
-    corrected_huella_id, correction_message = _verificar_id_enrolado(
-        db_manager, profesor_id, huella_id, huella_id_preferida=huella_id_preferida
-    )
-    final_message = f"Huella registrada para {profesor.nombre}. ID: {corrected_huella_id}"
-    if correction_message:
-        final_message += f" ({correction_message})"
+    # IMPORTANTE: no hacemos verificación adicional del ID tras el enrolado.
+    # El servidor PiFinger ya devuelve el ID asignado durante el registro.
+    final_message = f"Huella registrada para {profesor.nombre}. ID: {huella_id}"
 
-    return True, final_message, corrected_huella_id
+    return True, final_message, huella_id
+

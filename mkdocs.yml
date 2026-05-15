@@ -15,6 +15,7 @@ nav:
   - Módulo de Guardias:
       - Motor de cálculo: guardias.md
   - Módulo de Presencia: presencia.md
+  - Fix: fix.md
   - Pruebas unitarias con pytest: pruebas.md
   - Despliegue en Raspberry Pi: despliegue.md
 markdown_extensions:

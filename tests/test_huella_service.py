@@ -30,11 +30,68 @@ def test_parsear_respuesta_identificacion_pass_con_id_en_texto():
     assert error is None
 
 
+def test_parsear_respuesta_identificacion_ignora_buffer_cancel_ok_fail():
+    datos = {
+        "message": "No coincide",
+        "ok": False,
+        "raw": [
+            "<R>CANCEL</R>\n<R>OK</R>\nPlease input fingerprint to compare.\n",
+            "Mismatch!\n<R>FAIL</R>\n",
+        ],
+    }
+
+    huella_id, error = _parsear_respuesta_identificacion(datos)
+
+    assert huella_id is None
+    assert error == "NO_DATA"
+
+
+def test_parsear_respuesta_identificacion_mismatch_no_aborta_como_fail():
+    huella_id, error = _parsear_respuesta_identificacion(
+        {"message": "No coincide", "ok": False, "raw": ["Mismatch!\n<R>FAIL</R>\n"]}
+    )
+
+    assert huella_id is None
+    assert error == "NO_MATCH"
+
+
+def test_parsear_respuesta_identificacion_pass_en_raw_tiene_prioridad():
+    huella_id, error = _parsear_respuesta_identificacion(
+        {"message": "ok", "ok": False, "raw": ["<R>PASS_0</R>\n"]}
+    )
+
+    assert huella_id == 0
+    assert error is None
+
+
 def test_parsear_respuesta_enrolado_pass_id_en_dict():
     huella_id, error = _parsear_respuesta_enrolado({"result": "PASS_14"})
 
     assert huella_id == 14
     assert error is None
+
+
+def test_parsear_respuesta_enrolado_slot_en_dict():
+    huella_id, error = _parsear_respuesta_enrolado({"ok": True, "slot": "#0"})
+
+    assert huella_id == 0
+    assert error is None
+
+
+def test_parsear_respuesta_enrolado_slot_en_texto():
+    huella_id, error = _parsear_respuesta_enrolado("#7")
+
+    assert huella_id == 7
+    assert error is None
+
+
+def test_siguiente_slot_libre_usa_primer_hueco():
+    profesores = [
+        Profesor(id=1, nombre="Ana", huella_id=0, activo=1),
+        Profesor(id=2, nombre="Luis", huella_id=2, activo=1),
+    ]
+
+    assert huella_service._siguiente_slot_libre(profesores) == 1
 
 
 def test_borrar_huellas_remotas_ok(monkeypatch):
@@ -64,6 +121,8 @@ def test_borrar_huellas_remotas_ok(monkeypatch):
 
 
 def test_registrar_huella_profesor_fallback_vincula_huella_existente(monkeypatch):
+    recibido = {}
+
     class FakeDBManager:
         def __init__(self, _db_path):
             self.guardado = None
@@ -71,23 +130,27 @@ def test_registrar_huella_profesor_fallback_vincula_huella_existente(monkeypatch
         def get_profesor_by_id(self, profesor_id):
             return Profesor(id=profesor_id, nombre="Ana", huella_id=None, activo=1)
 
+        def get_profesores(self):
+            return [Profesor(id=9, nombre="Sergio", huella_id=0, activo=1)]
+
         def set_profesor_huella_id(self, profesor_id, huella_id):
             self.guardado = (profesor_id, huella_id)
             return 1
 
     monkeypatch.setattr(huella_service, "DBManager", FakeDBManager)
-    monkeypatch.setattr(
-        huella_service,
-        "enrolar_huella_remota",
-        lambda **_kwargs: (None, "El servidor de huellas no expone endpoint de alta."),
-    )
+    def fake_enrolar_huella_remota(**kwargs):
+        recibido["slot"] = kwargs["huella_id_preferida"]
+        return 7, None
+
+    monkeypatch.setattr(huella_service, "enrolar_huella_remota", fake_enrolar_huella_remota)
     monkeypatch.setattr(huella_service, "_identificar_via_red", lambda: 7)
 
     ok, mensaje, huella_id = huella_service.registrar_huella_profesor(1, db_path="ies.db")
 
     assert ok is True
     assert huella_id == 7
-    assert "Se vinculó la huella existente" in mensaje
+    assert "ID: 7" in mensaje
+    assert recibido["slot"] == 1
 
 
 def test_registrar_huella_profesor_fallback_sin_huella_detectada(monkeypatch):
@@ -97,6 +160,9 @@ def test_registrar_huella_profesor_fallback_sin_huella_detectada(monkeypatch):
 
         def get_profesor_by_id(self, profesor_id):
             return Profesor(id=profesor_id, nombre="Luis", huella_id=None, activo=1)
+
+        def get_profesores(self):
+            return []
 
         def set_profesor_huella_id(self, profesor_id, huella_id):
             return 1
@@ -113,10 +179,10 @@ def test_registrar_huella_profesor_fallback_sin_huella_detectada(monkeypatch):
 
     assert ok is False
     assert huella_id is None
-    assert "No hay endpoint de alta" in mensaje
+    assert "El servidor de huellas no expone endpoint de alta" in mensaje
 
 
-def test_registrar_huella_profesor_corrige_id_con_scan(monkeypatch):
+def test_registrar_huella_profesor_no_reescanea_tras_register(monkeypatch):
     saved = []
 
     class FakeDBManager:
@@ -146,9 +212,9 @@ def test_registrar_huella_profesor_corrige_id_con_scan(monkeypatch):
     )
 
     assert ok is True
-    assert huella_id == 0
-    assert "corregido" in mensaje.lower()
-    assert saved == [(1, 1), (1, 0)]
+    assert huella_id == 1
+    assert "ID: 1" in mensaje
+    assert saved == [(1, 1)]
 
 
 def test_identificar_huella_limita_la_busqueda_a_huellas_registradas(monkeypatch):
@@ -162,6 +228,9 @@ def test_identificar_huella_limita_la_busqueda_a_huellas_registradas(monkeypatch
                 Profesor(id=2, nombre="Luis", huella_id=19, activo=1),
             ]
 
+        def get_profesor_por_huella_id(self, huella_id):
+            return Profesor(id=2, nombre="Luis", huella_id=huella_id, activo=1)
+
     recibido = {}
 
     def fake_identificar_via_red(*, huella_ids_validos=None):
@@ -171,9 +240,9 @@ def test_identificar_huella_limita_la_busqueda_a_huellas_registradas(monkeypatch
     monkeypatch.setattr(huella_service, "DBManager", FakeDBManager)
     monkeypatch.setattr(huella_service, "_identificar_via_red", fake_identificar_via_red)
 
-    profesor_id = huella_service.identificar_huella()
+    huella_id = huella_service.identificar_huella()
 
-    assert profesor_id == 2
+    assert huella_id == 19
     assert recibido["ids"] == {12, 19}
 
 
@@ -185,11 +254,15 @@ def test_identificar_huella_forza_serial_local(monkeypatch):
         def get_profesores(self):
             return [Profesor(id=1, nombre="Ana", huella_id=12, activo=1)]
 
+        def get_profesor_por_huella_id(self, huella_id):
+            return Profesor(id=1, nombre="Ana", huella_id=huella_id, activo=1)
+
     monkeypatch.setattr(huella_service, "DBManager", FakeDBManager)
     monkeypatch.setenv("PIFINGER_MODE", "local")
+    monkeypatch.setattr(huella_service.platform, "system", lambda: "Linux")
     monkeypatch.setattr(huella_service, "_identificar_serial_local", lambda: 12)
     monkeypatch.setattr(huella_service, "_identificar_via_red", lambda *args, **kwargs: None)
 
-    profesor_id = huella_service.identificar_huella()
+    huella_id = huella_service.identificar_huella()
 
-    assert profesor_id == 1
+    assert huella_id == 12

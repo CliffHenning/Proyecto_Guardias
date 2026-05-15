@@ -48,7 +48,34 @@ La aplicación estará disponible en `http://127.0.0.1:5000`.
 
 En la tabla `horarios`, los tramos de guardia se representan con la asignatura `Guardia`. Esos tramos cuentan como disponibilidad para cubrir ausencias, pero no como carga lectiva ordinaria.
 
-## Variable de entorno
+## Flujo actual de huella
+
+El sistema usa un servidor Flask en la Raspberry Pi para hablar con el lector PiFinger. La aplicacion principal en Windows llama a ese servidor por HTTP.
+
+Regla importante:
+
+```text
+huella_id == slot del sensor
+```
+
+No hay un identificador global adicional. Si el sensor registra una huella en el slot `0`, SQLite guarda `huella_id = 0`. Si la siguiente huella se registra en el slot `1`, SQLite guarda `huella_id = 1`.
+
+Flujo de registro:
+
+1. Windows calcula el siguiente slot libre segun los `huella_id` ya guardados en `ies.db`.
+2. Windows llama a la Raspberry con `/register/<nombre>?slot=N`.
+3. La Raspberry registra la huella con `RegisterOneFp=N`.
+4. La Raspberry devuelve `slot: N`.
+5. Windows guarda ese valor en `profesores.huella_id`.
+
+Flujo de escaneo:
+
+1. Windows llama a `/scan`.
+2. La Raspberry devuelve `PASS_N`.
+3. Windows busca directamente `profesor.huella_id == N`.
+4. Si el profesor estaba fuera, se registra `entrada`; si estaba presente, se registra `salida`.
+
+## Variables de entorno
 
 El método de identificación del profesorado se controla mediante la variable de entorno `METODO_PRESENCIA`:
 
@@ -58,6 +85,16 @@ $env:METODO_PRESENCIA = "huella"
 ```
 
 Si no se define, el sistema usa `huella` como valor predeterminado.
+
+### Servidor de huellas Raspberry Pi
+
+La URL del servidor remoto se configura con `PIFINGER_URL`:
+
+```powershell
+$env:PIFINGER_URL = "http://192.168.208.120:5001"
+```
+
+Si no se define, se usa el valor por defecto configurado en `modules/presencia/huella_service.py`.
 
 ### Modo de identificación local para Raspberry Pi
 
@@ -124,7 +161,7 @@ proyecto_guardias/
 
 ## Notas sobre hardware
 
-El lector de huella utiliza comunicación serie y puede simularse en desarrollo introduciendo manualmente el identificador de huella. Los tests cubren las rutas principales sin necesidad de hardware físico.
+El lector de huella utiliza comunicacion serie en la Raspberry Pi. Para el flujo remoto actual deben copiarse a la Raspberry los archivos compatibles `api_finger.py` y `fingerprint.py`, donde `register_fingerprint(slot_id)` usa el comando `RegisterOneFp=<slot>`.
 
 Si ejecutas la aplicación en la Raspberry Pi y tu sensor es compatible, instala `pyfingerprint` en la Pi y usa el modo local con `PIFINGER_MODE=local` o `PIFINGER_FORCE_LOCAL=1`.
 

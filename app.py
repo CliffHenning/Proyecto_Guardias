@@ -7,7 +7,6 @@ from flask import Flask, render_template, redirect, request, url_for, flash, jso
 from config import describir_hora, describir_horas
 from modules.db.db_manager import DBManager
 from modules.guardias.motor import MotorGuardias
-from modules.db.models import Presencia
 from modules.presencia.registro import registrar_presencia, obtener_estado_actual
 from modules.presencia.huella_service import (
     identificar_huella,
@@ -373,12 +372,12 @@ def registrar_guardia():
 
 @bp.route("/confirmar-presencia-huella", methods=["POST"])
 def confirmar_presencia_huella():
-    db = DBManager()
+    db = DBManager(_obtener_db_path())
 
     print("[HUELLA] Confirmando presencia automática...")
 
     # 1. detectar huella desde sensor
-    huella_id = identificar_huella()
+    huella_id = identificar_huella(db_path=_obtener_db_path())
 
     if huella_id is None:
         return jsonify({
@@ -400,23 +399,18 @@ def confirmar_presencia_huella():
     print(f"[HUELLA] Profesor encontrado: {profesor.nombre}")
 
     # 3. registrar presencia automáticamente
-    presencia = Presencia(
-        profesor_id=profesor.id,
-        tipo="entrada"
-    )
+    tipo = registrar_presencia(profesor.id, db_path=_obtener_db_path())
 
-    db.insert_presencia(presencia)
-
-    print("[HUELLA] Presencia registrada correctamente")
+    print(f"[HUELLA] Presencia registrada correctamente: {tipo}")
 
     # 4. respuesta final
     return jsonify({
         "ok": True,
-        "tipo": "entrada",
+        "tipo": tipo,
         "nombre": profesor.nombre,
         "profesor_id": profesor.id,
         "huella_id": huella_id,
-        "mensaje": "Presencia registrada automáticamente"
+        "mensaje": f"{profesor.nombre}: {'presente' if tipo == 'entrada' else 'ausente'}"
     })
 
 @bp.route("/enrolar", methods=["POST"])

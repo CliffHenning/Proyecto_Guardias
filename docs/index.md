@@ -19,6 +19,7 @@ La solución está organizada en módulos independientes para mantener separadas
 - Flask: rutas principales y vistas de la aplicación.
 - Guardias: flujo de cálculo, ranking y registro manual.
 - Presencia: identificación del profesorado y alternancia de entrada o salida.
+- Fix: cambios aplicados para registrar huellas en slots reales del sensor.
 - Pruebas: ejecución de la suite automática con pytest.
 - Despliegue: notas base para ejecutar el proyecto en Raspberry Pi.
 

@@ -20,7 +20,7 @@ def _pifinger_url() -> str:
 
 
 def _timeout_lectura_red() -> int:
-    valor = os.environ.get("PIFINGER_TIMEOUT", "5").strip()
+    valor = os.environ.get("PIFINGER_TIMEOUT", "10").strip()
     try:
         timeout = int(valor)
     except ValueError:
@@ -195,6 +195,22 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
         if patron_pass_completo:
             return int(patron_pass_completo.group(1)), None
 
+        hay_match = (
+            "MATCHED!" in texto_completo_upper
+            or datos.get("matched") is True
+            or datos.get("ok") is True
+        )
+        if hay_match:
+            for clave in ("slot", "slot_id", "huella_id", "id", "fingerprint_id"):
+                huella_id = _extraer_slot_de_resultado(datos.get(clave))
+                if huella_id is not None:
+                    return huella_id, None
+
+            if huella_ids_validos and len(huella_ids_validos) == 1:
+                return next(iter(huella_ids_validos)), None
+
+            return None, "MATCH_SIN_IDENTIDAD"
+
         if (
             "please input fingerprint to compare" in texto_completo_lower
             or "input fingerprint" in texto_completo_lower
@@ -220,7 +236,8 @@ def _parsear_respuesta_identificacion(datos, huella_ids_validos=None):
                 return next(iter(huella_ids_validos)), None
 
             # Prioridad 3: match sin ID numérico explícito.
-            return None, "MATCH_SIN_ID"
+            # Fiabilidad: no inventamos ID.
+            return None, "MATCH_SIN_IDENTIDAD"
 
 
         resultado = str(resultado or "").strip()
@@ -400,7 +417,14 @@ def _identificar_via_red(huella_ids_validos=None) -> int | None:
                         if http_error.code in {404, 405}:
                             ultimo_error = f"Ruta/metodo no disponible: {ruta} [{metodo}]"
                             continue
-                        raise
+                        if http_error.code == 409:
+                            crudo = http_error.read().decode()
+                            try:
+                                datos = json.loads(crudo)
+                            except json.JSONDecodeError:
+                                datos = crudo
+                        else:
+                            raise
 
                     hubo_ruta_valida = True
                     global _RUTA_IDENTIFICACION_CACHE, _METODO_IDENTIFICACION_CACHE
@@ -430,16 +454,18 @@ def _identificar_via_red(huella_ids_validos=None) -> int | None:
                                 print(
                                     f"Huella detectada. ID={huella_id_int} ignorado por no estar registrada en la base local."
                                 )
-                                ruta_activa = ruta
-                                metodo_activo = metodo
-                                _RUTA_IDENTIFICACION_CACHE = ruta
-                                _METODO_IDENTIFICACION_CACHE = metodo
-                                hubo_espera_sensor = True
-                                break
+                                return None
 
                         print(f"Huella detectada. ID={huella_id_int}")
                         return huella_id_int
-                    if mensaje in {"NO_DATA", "MATCH_SIN_ID", "NO_MATCH"}:
+                    if mensaje in {"MATCH_SIN_ID", "MATCH_SIN_IDENTIDAD"}:
+                        print(
+                            "Huella reconocida por el sensor, pero la Raspberry no devolvio "
+                            "un ID/slot de huella. No se puede asociar a un profesor."
+                        )
+                        return None
+
+                    if mensaje in {"NO_DATA", "NO_MATCH"}:
                         ruta_activa = ruta
                         metodo_activo = metodo
                         _RUTA_IDENTIFICACION_CACHE = ruta
@@ -733,6 +759,8 @@ def enrolar_huella_remota(profesor_id=None, huella_id_preferida=None, db_path: s
             return int(huella_id), None
 
         if isinstance(datos, dict) and datos.get("ok") is True:
+            if huella_id_preferida is not None:
+                return int(huella_id_preferida), None
             return None, f"Alta OK pero sin slot en respuesta: {datos}"
 
         # error conocido

@@ -21,6 +21,27 @@ SET_ACTIVE_MODE_STRING = b"<C>SetActiveMode</C>"
 SET_ACTIVE_DEMO_MODE_STRING = b"<C>SetActiveMode=0</C>"
 SET_ACTIVE_OPERATION_MODE_STRING = b"<C>SetActiveMode=1</C>"
 
+# Candidate read-only / identify-like commands. These are intentionally kept
+# separate from register/clear/password/baud commands.
+IDENTIFY_CANDIDATE_COMMANDS = (
+    b"<C>IdentifyFingerprint</C>",
+    b"<C>IdentifyFp</C>",
+    b"<C>SearchFingerprint</C>",
+    b"<C>SearchFingerprint=0,127</C>",
+    b"<C>SearchFingerprint=0</C>",
+    b"<C>SearchFp</C>",
+    b"<C>SearchFp=0,127</C>",
+    b"<C>SearchFp=0</C>",
+    b"<C>Search</C>",
+    b"<C>Search=0,127</C>",
+    b"<C>Search=0</C>",
+    b"<C>MatchFingerprint</C>",
+    b"<C>MatchFp</C>",
+    b"<C>VerifyFingerprint</C>",
+    b"<C>VerifyFp</C>",
+    b"<C>CompareFingerprint</C>",
+)
+
 
 class FingerprintSensor(SerialComm):
     def __init__(self):
@@ -73,6 +94,11 @@ class FingerprintSensor(SerialComm):
 
     def compare_fingerprint(self):
         return self.send_cmd(COMPARE_FINGERPRINT_STRING)
+
+    def send_raw_command(self, command):
+        if isinstance(command, str):
+            command = command.encode("utf-8")
+        return self.send_cmd(command)
 
     def set_active_mode(self):
         return self.send_cmd(SET_ACTIVE_DEMO_MODE_STRING)

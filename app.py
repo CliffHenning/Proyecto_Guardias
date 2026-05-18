@@ -124,6 +124,7 @@ def _agrupar_ranking_por_profesor(ranking_profesores):
 
     return ranking_agrupado
 
+@bp.route("")
 @bp.route("/")
 def vista_presencia():
     try:
@@ -416,22 +417,26 @@ def confirmar_presencia_huella():
 @bp.route("/enrolar", methods=["POST"])
 def enrolar_huella_profesor():
     profesor_id = request.form.get("profesor_id", type=int)
+    huella_id_preferida = request.form.get("huella_id_preferida", type=int)
 
     if profesor_id is None:
         return jsonify({
             "ok": False,
-            "message": "Profesor no seleccionado"
-        }), 400
+            "message": "Selecciona un profesor",
+            "error": "Selecciona un profesor"
+        })
 
     try:
         ok, mensaje, huella_id = registrar_huella_profesor(
             profesor_id,
-            db_path=_obtener_db_path()
+            db_path=_obtener_db_path(),
+            huella_id_preferida=huella_id_preferida,
         )
 
         return jsonify({
             "ok": ok,
             "message": mensaje,
+            "error": None if ok else mensaje,
             "huella_id": huella_id
         })
 

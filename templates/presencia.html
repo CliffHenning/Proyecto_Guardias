@@ -263,6 +263,7 @@
             const modal = new bootstrap.Modal(modalEl);
 
             let busy = false;
+            let reloadAfterModal = false;
 
             // =========================
             // FUNCION UTIL: MOSTRAR MODAL
@@ -272,6 +273,24 @@
                 modalBody.textContent = message;
                 modal.show();
             }
+
+            function setBusy(isBusy) {
+                busy = isBusy;
+                btnRegistrar.disabled = isBusy;
+                btnScan.disabled = isBusy;
+                selectProfesor.disabled = isBusy;
+            }
+
+            function showSuccess(title, message) {
+                reloadAfterModal = true;
+                showModal(title, message);
+            }
+
+            modalEl.addEventListener("hidden.bs.modal", () => {
+                if (reloadAfterModal) {
+                    window.location.reload();
+                }
+            });
 
             // =========================
             // REGISTRAR HUELLA (API /register)
@@ -294,8 +313,7 @@
 
 
 
-                busy = true;
-                btnRegistrar.disabled = true;
+                setBusy(true);
 
                 try {
                     showModal("Registrando huella...", "Coloca el dedo en el sensor");
@@ -307,10 +325,10 @@
                         body,
                     });
 
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
 
-                    if (data.ok) {
-                        showModal("Registro correcto", data.message || `Huella registrada para el profesor. ID ${data.huella_id}`);
+                    if (res.ok && data.ok) {
+                        showSuccess("Registro correcto", data.message || `Huella registrada para el profesor. ID ${data.huella_id}`);
                     } else {
                         showModal("Error", data.error || data.message || "Fallo en el registro");
                     }
@@ -318,8 +336,7 @@
                 } catch (err) {
                     showModal("Error", err.toString());
                 } finally {
-                    btnRegistrar.disabled = false;
-                    busy = false;
+                    setBusy(false);
                 }
             });
 
@@ -331,8 +348,7 @@
 
                 if (busy) return;
 
-                busy = true;
-                btnScan.disabled = true;
+                setBusy(true);
 
                 try {
                     showModal("Escaneando huella...", "Coloca el dedo en el sensor");
@@ -340,10 +356,10 @@
                     const res = await fetch(`${window.location.origin}/presencia/confirmar-presencia-huella`, {
                         method: "POST",
                     });
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
 
-                    if (data.ok) {
-                        showModal("Acceso permitido", data.mensaje || data.message || "Profesor reconocido");
+                    if (res.ok && data.ok) {
+                        showSuccess("Acceso permitido", data.mensaje || data.message || "Profesor reconocido");
                     } else {
                         showModal("Acceso denegado", data.mensaje || data.message || data.error || "No reconocido");
                     }
@@ -351,8 +367,7 @@
                 } catch (err) {
                     showModal("Error", err.toString());
                 } finally {
-                    btnScan.disabled = false;
-                    busy = false;
+                    setBusy(false);
                 }
             });
 

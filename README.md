@@ -38,19 +38,27 @@ La aplicación estará disponible en `http://127.0.0.1:5000`.
 
 ## Rutas principales
 
-| Ruta | Descripción |
-|------|-------------|
-| `/` | Página de inicio |
-| `/presencia` | Registro de presencia del profesorado |
-| `/guardias` | Visualización del cálculo de guardias |
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `/` | GET | Página de inicio |
+| `/presencia` | GET | Vista de control de presencia (UI) |
+| `/presencia/confirmar-presencia-huella` | POST | Identifica huella y registra presencia automáticamente (JSON) |
+| `/presencia/enrolar` | POST | Enrola huella para un profesor y guarda `huella_id` (JSON) |
+| `/presencia/borrar-huella-bd` | POST | Borra huella en BD (flujo UI con redirect + flash) |
+| `/guardias` | GET | Vista de guardias (UI) |
+| `/guardias/registrar` | POST | Registra una guardia confirmada manualmente (UI) |
+| `/horario` | GET | Vista de horario con ausencias (UI) |
+
 
 ## Horarios con guardia
 
 En la tabla `horarios`, los tramos de guardia se representan con la asignatura `Guardia`. Esos tramos cuentan como disponibilidad para cubrir ausencias, pero no como carga lectiva ordinaria.
 
-## Flujo actual de huella
+## Flujo actual de huella (registro y escaneo)
 
-El sistema usa un servidor Flask en la Raspberry Pi para hablar con el lector PiFinger. La aplicacion principal en Windows llama a ese servidor por HTTP.
+El sistema separa:
+- **App principal (Windows):** Flask + lógica de presencia/guardias.
+- **Servidor de huellas (Raspberry Pi):** API para identificar y enrolar huellas (PiFinger).
 
 Regla importante:
 
@@ -58,22 +66,46 @@ Regla importante:
 huella_id == slot del sensor
 ```
 
-No hay un identificador global adicional. Si el sensor registra una huella en el slot `0`, SQLite guarda `huella_id = 0`. Si la siguiente huella se registra en el slot `1`, SQLite guarda `huella_id = 1`.
+En la base de datos (tabla `profesores`), `profesores.huella_id` guarda el **slot real** del sensor.
 
-Flujo de registro:
+### 1) Registro (enrolar huella)
 
-1. Windows calcula el siguiente slot libre segun los `huella_id` ya guardados en `ies.db`.
-2. Windows llama a la Raspberry con `/register/<nombre>?slot=N`.
-3. La Raspberry registra la huella con `RegisterOneFp=N`.
-4. La Raspberry devuelve `slot: N`.
-5. Windows guarda ese valor en `profesores.huella_id`.
+Cuando se pulsa el enrolado desde la UI, la app Flask hace:
 
-Flujo de escaneo:
+1. Se solicita un `profesor_id` (y opcional `huella_id_preferida`) vía `POST /presencia/enrolar`.
+2. `registrar_huella_profesor()` calcula el **siguiente slot libre** consultando `ies.db`, o usa el `huella_id_preferida` si se proporciona.
+3. Se llama a la Raspberry para enrolar (endpoint configurable vía variables de entorno). El servicio interpreta el slot devuelto por el PiFinger.
+4. Se guarda el slot resultante en `profesores.huella_id`.
 
-1. Windows llama a `/scan`.
-2. La Raspberry devuelve `PASS_N`.
-3. Windows busca directamente `profesor.huella_id == N`.
-4. Si el profesor estaba fuera, se registra `entrada`; si estaba presente, se registra `salida`.
+### 2) Escaneo (confirmar presencia)
+
+Cuando se confirma presencia automática, la app hace:
+
+1. Llamada `POST /presencia/confirmar-presencia-huella`.
+2. `identificar_huella()` lee la huella desde la Raspberry (endpoint configurable) y devuelve el `huella_id` (slot) detectado.
+3. Se busca el profesor con `DB: profesores.huella_id == huella_id`.
+4. Se registra presencia con alternancia:
+   - si el último estado era `entrada` ⇒ nuevo registro `salida`
+   - si no hay entrada activa ⇒ nuevo registro `entrada`
+
+### Parámetros soportados
+
+**En API JSON (app principal):**
+- `POST /presencia/enrolar`
+  - `profesor_id` (int, requerido)
+  - `huella_id_preferida` (int, opcional)
+- `POST /presencia/confirmar-presencia-huella`
+  - sin body obligatorio
+
+**En el servidor/cliente de huellas (Raspberry / huella_service):**
+- `PIFINGER_URL` (string)
+- `PIFINGER_IDENTIFY_PATH` / `PIFINGER_IDENTIFY_METHOD`
+- `PIFINGER_ENROLL_PATH` / `PIFINGER_ENROLL_METHOD`
+- `PIFINGER_TIMEOUT`
+- `PIFINGER_ENROLL_TIMEOUT`
+- `PIFINGER_PORT`
+- `ALLOW_MANUAL_HUELLA` (opcional, desarrollo)
+
 
 ## Variables de entorno
 
@@ -95,6 +127,27 @@ $env:PIFINGER_URL = "http://192.168.208.120:5001"
 ```
 
 Si no se define, se usa el valor por defecto configurado en `modules/presencia/huella_service.py`.
+
+#### Identificación (scan/match)
+
+- Rutas (path) intentadas para identificación (en orden): por defecto intenta varias opciones como `GET /scan`, `GET /identify`, etc.
+- Puedes forzar path/método con:
+
+```powershell
+$env:PIFINGER_IDENTIFY_PATH = "/scan"          # opcional
+$env:PIFINGER_IDENTIFY_METHOD = "GET"         # GET o POST (opcional)
+```
+
+#### Enrolado (register)
+
+- Rutas (path) intentadas para enrolado (en orden): por defecto intenta varias opciones como `POST /register_fingerprint`, `POST /enroll`, etc.
+- Puedes forzar path/método con:
+
+```powershell
+$env:PIFINGER_ENROLL_PATH = "/register_fingerprint"  # opcional
+$env:PIFINGER_ENROLL_METHOD = "POST"                  # GET o POST (opcional)
+```
+
 
 ### Modo de identificación local para Raspberry Pi
 
@@ -159,9 +212,100 @@ proyecto_guardias/
 └── tests/                  # Suite de tests pytest
 ```
 
+## Ejemplos de uso (curl) y respuestas JSON
+
+### Confirmar presencia automática
+
+`POST /presencia/confirmar-presencia-huella`
+
+Ejemplo:
+
+```bash
+curl -sS -X POST http://127.0.0.1:5000/presencia/confirmar-presencia-huella \
+  -H "Content-Type: application/x-www-form-urlencoded"
+```
+
+Respuestas:
+
+- **200** (huella identificada y profesor encontrado):
+
+```json
+{
+  "ok": true,
+  "tipo": "entrada",
+  "nombre": "Nombre Profesor",
+  "profesor_id": 1,
+  "huella_id": 0,
+  "mensaje": "Nombre Profesor: presente"
+}
+```
+
+- **400** (no se detecta ninguna huella):
+
+```json
+{"ok": false, "mensaje": "No se detectó ninguna huella"}
+```
+
+- **404** (huella detectada pero no registrada en BD):
+
+```json
+{"ok": false, "mensaje": "Huella no registrada (3)"}
+```
+
+### Enrolar huella
+
+`POST /presencia/enrolar`
+
+Ejemplo (form-urlencoded):
+
+```bash
+curl -sS -X POST http://127.0.0.1:5000/presencia/enrolar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "profesor_id=1&huella_id_preferida=2"
+```
+
+Respuestas:
+
+- **200** (éxito):
+
+```json
+{
+  "ok": true,
+  "message": "Huella registrada para Ana. ID: 2",
+  "error": null,
+  "huella_id": 2
+}
+```
+
+- **200** (fallo controlado por validación de negocio):
+
+```json
+{
+  "ok": false,
+  "message": "Profesor no encontrado",
+  "error": "Profesor no encontrado",
+  "huella_id": null
+}
+```
+
+- **500** (error inesperado):
+
+```json
+{"ok": false, "message": "<detalle>"}
+```
+
+### Seguridad: bloqueo de comandos destructivos
+
+La aplicación Flask **no expone endpoints de borrado destructivo** mediante la API JSON de identificación/escaneo.
+
+- El endpoint `/presencia/borrar-huella-bd` es un flujo de UI: borra `profesores.huella_id` (no borra huellas del sensor) y redirige con `flash`.
+- Las operaciones destructivas sobre el dispositivo PiFinger (p.ej. borrar huellas del sensor) se gestionan como utilidades internas del módulo `modules/presencia/huella_service.py` y no se publican como endpoints remotos sin control.
+
+Si necesitas operaciones destructivas en el sensor, deben ejecutarse manualmente (scripts) y no vía peticiones remotas sin autenticación.
+
 ## Notas sobre hardware
 
-El lector de huella utiliza comunicacion serie en la Raspberry Pi. Para el flujo remoto actual deben copiarse a la Raspberry los archivos compatibles `api_finger.py` y `fingerprint.py`, donde `register_fingerprint(slot_id)` usa el comando `RegisterOneFp=<slot>`.
+El lector de huella utiliza comunicación serie en la Raspberry Pi. Para el flujo remoto actual deben copiarse a la Raspberry los archivos compatibles `api_finger.py` y `fingerprint.py`, donde `register_fingerprint(slot_id)` usa el comando `RegisterOneFp=<slot>`.
 
 Si ejecutas la aplicación en la Raspberry Pi y tu sensor es compatible, instala `pyfingerprint` en la Pi y usa el modo local con `PIFINGER_MODE=local` o `PIFINGER_FORCE_LOCAL=1`.
 

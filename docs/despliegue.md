@@ -21,8 +21,15 @@ Archivos que deben estar en la Raspberry:
 El servidor debe exponer:
 
 - `GET /health`
-- `GET /register/<nombre>?slot=N`
-- `GET /scan`
+
+- Endpoints de huellas (identificación y enrolado): el **cliente** (Windows / `modules/presencia/huella_service.py`) intenta varias rutas por defecto, por ejemplo:
+  - Identificación (scan/match): `/scan`, `/identificar`, `/identify`, `/match`, `/verify`, `/compare`, `/compare_fp`
+  - Enrolado (register): `/register_fingerprint`, `/enroll`, `/enrolar`, `/register`, `/add`, `/add_fingerprint`
+
+Puedes fijar una ruta concreta con:
+- `PIFINGER_IDENTIFY_PATH` / `PIFINGER_IDENTIFY_METHOD`
+- `PIFINGER_ENROLL_PATH` / `PIFINGER_ENROLL_METHOD`
+
 
 La aplicacion principal en Windows debe apuntar a la Raspberry con:
 

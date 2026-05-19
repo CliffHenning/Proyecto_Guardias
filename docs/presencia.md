@@ -16,13 +16,31 @@ Cuando el sensor devuelve `PASS_0`, la aplicacion busca directamente un profesor
 
 ## Registro de huella
 
-- Windows calcula el primer slot libre en SQLite.
-- El alta se solicita a la Raspberry con `/register/<nombre>?slot=N`.
-- La Raspberry registra la huella con `RegisterOneFp=N`.
-- La respuesta debe incluir `slot: N`.
+- Windows (app principal) calcula el primer slot libre en SQLite.
+- El alta se solicita a la Raspberry mediante endpoints configurables en `modules/presencia/huella_service.py`.
+- Por defecto el cliente intenta varias rutas de “register” (enrolado), por ejemplo: `/register_fingerprint`, `/enroll`, `/enrolar`, `/register`, etc.
+- La Raspberry registra la huella en el **slot real** del sensor equivalente a `RegisterOneFp=<slot>`.
+- La respuesta debe permitir obtener el slot (por ejemplo `PASS_<n>`, `slot`, `slot_id` o un texto que contenga el número).
 - Ese valor se guarda en `profesores.huella_id`.
 
 No se usa un `fp_id` global separado.
+
+## Endpoints JSON (app principal)
+
+La identificación automática y el registro de presencia se realizan mediante:
+
+- `POST /presencia/confirmar-presencia-huella`
+
+Y el enrolado mediante:
+
+- `POST /presencia/enrolar`
+
+Códigos HTTP y mensajes esperados:
+
+- **200**: OK (`ok: true`) o fallo controlado (`ok: false`)
+- **400**: sin huella detectada
+- **404**: huella detectada pero no registrada en BD
+- **500**: excepción no controlada
 
 ## Registro de presencia
 

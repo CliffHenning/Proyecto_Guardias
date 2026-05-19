@@ -12,7 +12,9 @@ El sistema utiliza SQLite como base de datos local.
 ## Huellas
 
 - La columna `profesores.huella_id` guarda el slot real del sensor PiFinger.
-- La regla del sistema es `huella_id == slot del sensor`.
+- Regla del sistema: `huella_id == slot del sensor`.
+
+Cuando el sensor devuelve `PASS_<n>`, la app busca `profesor.huella_id == <n>` y asigna el profesor correspondiente.
 - Si la Raspberry devuelve `PASS_1`, se busca un profesor con `huella_id = 1`.
 - Al asignar un `huella_id`, el gestor limpia ese mismo valor de otros profesores para evitar duplicados.
 

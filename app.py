@@ -210,19 +210,42 @@ def obtener_datos_horario(fecha=None, db_path=None):
         db_manager = DBManager(db_path)
         dia_semana = datetime.strptime(fecha, "%Y-%m-%d").weekday()  # 0=Lunes, 6=Domingo
 
+        # La tabla `horarios.dia` guarda nombres de día en texto, pero con posibles variantes
+        # (tildes/errores ortográficos). No asumimos uno solo: probamos varios
+        # y nos quedamos con el que tenga datos.
+        variantes_dia = [
+            "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo",
+        ]
+        # Construimos la variante principal y variantes alternativas (sin tilde)
+        dia_principal = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][dia_semana]
+        dia_sin_tilde = ["Lunes", "Martes", "Mircoles", "Jueves", "Viernes", "Sabado", "Domingo"][dia_semana]
+        dia_semana_textos = [dia_principal, dia_sin_tilde]
+
         # Obtener profesores activos
+
         profesores = db_manager.get_profesores()
-        profesores_activos = [p for p in profesores if p.activo == 1]
+        # Para evitar que el horario quede vacío por diferencias en el tipo/valor de `activo`
+        # mostramos el horario de todos los profesores devueltos por el DBManager.
+        profesores_activos = profesores
+
+
+        # Obtener horarios del día usando el texto exacto que exista en la BD.
+        # Primero intentamos con el formato con tilde (principal) y luego sin tilde.
+        horarios_dia = []
+        for dia_try in dia_semana_textos:
+            horarios_dia = db_manager.get_horarios_by_dia(dia_try)
+            if horarios_dia:
+                break
 
         # Obtener horas del día
         horas = list(range(1, 12))  # Horas 1-11
 
-        # Obtener horarios del día
-        horarios_dia = db_manager.get_horarios_by_dia(dia_semana)
 
         # Obtener presencias y ausencias del día
-        presencias = db_manager.get_presencias_by_fecha(fecha)
-        ausencias = db_manager.get_ausencias_by_fecha(fecha)
+        # DBManager expone get_presencias_hoy(fecha=None) y get_ausencias_hoy(fecha=None).
+        presencias = db_manager.get_presencias_hoy(fecha)
+        ausencias = db_manager.get_ausencias_hoy(fecha)
+
 
         # Crear mapa de ausencias por profesor y hora
         ausencias_map = {}
@@ -266,14 +289,18 @@ def obtener_datos_horario(fecha=None, db_path=None):
                     else:
                         motivo = ""
 
+                    # DBManager/Horario usa `tipo` y `es_guardia()` como criterio.
+                    # En algunos casos `Horario` no expone `tipo_guardia`.
+                    tipo_val = getattr(horario, "tipo_guardia", None) or getattr(horario, "tipo", None) or "clase"
                     celdas[profesor_id][hora] = {
                         "tiene_horario": True,
-                        "tipo": horario.tipo_guardia or "clase",
+                        "tipo": tipo_val,
                         "asignatura": horario.asignatura or "Sin asignatura",
                         "aula": horario.aula or "Sin aula",
                         "ausente": ausente,
                         "motivo": motivo,
                     }
+
                 else:
                     celdas[profesor_id][hora] = {
                         "tiene_horario": False,
@@ -308,6 +335,9 @@ def obtener_datos_horario(fecha=None, db_path=None):
         }
 
     except Exception as e:
+        import traceback as _traceback
+        print(f"[ERROR obtener_datos_horario] {type(e).__name__}: {e}")
+        _traceback.print_exc()
         # En caso de error, devolver datos vacíos
         return {
             "fecha": fecha,
@@ -318,6 +348,7 @@ def obtener_datos_horario(fecha=None, db_path=None):
             "celdas": {},
             "ausencias_totales": 0,
         }
+
 
 
 @app.route("/")

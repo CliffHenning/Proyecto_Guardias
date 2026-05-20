@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Horario</title>
+  <style>
+    .ausente { background: #ffdddd; color: #900; }
+    .ok { background: #ddffdd; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Horario del Profesorado - {{ datos.fecha_texto }}</h1>
+
+
+  <p>Total ausencias: <strong>{{ datos.ausencias_totales }}</strong></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Profesor</th>
+        {% for h in datos.horas %}
+          <th>{{ h.hora_texto }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for prof in datos.profesores %}
+        <tr>
+          <td>
+            {{ prof.nombre }}<br/>
+            <small>{{ prof.departamento }}</small>
+          </td>
+          {% for h in datos.horas %}
+            {% set celda = datos.celdas.get(prof.id, {}).get(h.hora) %}
+            {% if celda and celda.tiene_horario %}
+              {% if celda.ausente %}
+                <td class="ausente">
+              {% else %}
+                <td class="ok">
+              {% endif %}
+                  <div><strong>{{ celda.asignatura }}</strong></div>
+                  <div>{{ celda.aula }}</div>
+                  {% if celda.ausente %}
+                    <div><em>{{ celda.motivo }}</em></div>
+                  {% endif %}
+                </td>
+            {% else %}
+              <td></td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
+

@@ -74,13 +74,6 @@ def _redireccion_segura(destino, endpoint_fallback="vista_presencia"):
     return redirect(url_for(endpoint_fallback))
 
 
-def _obtener_ip_y_puerto_raspberry():
-    url_base = os.environ.get("PIFINGER_URL", "http://192.168.208.120:5001")
-    parsed = urlparse(url_base)
-    host = parsed.hostname or "192.168.208.120"
-    port = parsed.port or (443 if parsed.scheme == "https" else 5001)
-    return host, port
-
 
 def _agrupar_candidatos_por_hora(ranking_profesores):
     candidatos_por_hora = {}
@@ -131,8 +124,13 @@ def vista_presencia():
         estado = obtener_estado_actual()
 
         db = DBManager(_obtener_db_path())
+
         profesores = db.get_profesores()
         profesores = [p for p in profesores if p.activo == 1]
+
+        for profesor in profesores:
+            if profesor.id in estado:
+                estado[profesor.id]["huella_id"] = profesor.huella_id
 
     except Exception as e:
         print(f"[ERROR estado presencia] {e}")
@@ -471,6 +469,37 @@ def vista_horario():
     datos_horario = obtener_datos_horario(fecha=fecha)
     return render_template("horario.html", datos=datos_horario)
 
+@bp.route("/confirmar-presencia-manual", methods=["POST"])
+def confirmar_presencia_manual():
+
+    profesor_id = request.form.get(
+        "profesor_id",
+        type=int
+    )
+
+    if profesor_id is None:
+        flash("Profesor inválido", "error")
+        return redirect(url_for("presencia.vista_presencia"))
+
+    try:
+        tipo = registrar_presencia(
+            profesor_id,
+            db_path=_obtener_db_path()
+        )
+
+        db = DBManager(_obtener_db_path())
+        profesor = db.get_profesor_by_id(profesor_id)
+
+        flash(
+            f"{profesor.nombre}: "
+            f"{'presente' if tipo == 'entrada' else 'ausente'}",
+            "success"
+        )
+
+    except Exception as e:
+        flash(str(e), "error")
+
+    return redirect(url_for("presencia.vista_presencia"))
 
 app.register_blueprint(bp)
 

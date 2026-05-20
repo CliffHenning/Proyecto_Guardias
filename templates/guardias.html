@@ -70,17 +70,6 @@
                     <p class="text-secondary mb-2">Fecha consultada: {{ datos.fecha_texto }}</p>
                     <p class="mb-0 text-secondary">La vista muestra las guardias calculadas con las ausencias y horarios disponibles para esa fecha.</p>
                 </div>
-                <div class="col-lg-4">
-                    <div class="card stat-card h-100">
-                        <div class="card-body p-4">
-                            <p class="text-secondary text-uppercase small fw-semibold mb-3">Lectura de huella</p>
-                            <form action="{{ url_for('registrar_guardia') }}" method="post" class="d-grid">
-                                <input type="hidden" name="fecha" value="{{ datos.fecha }}">
-                                <button class="btn btn-primary" type="submit">Registrar huella</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
             </div>
         </section>
 
@@ -196,6 +185,11 @@
                                             {% endfor %}
                                         </select>
                                         <button type="submit" class="btn btn-sm btn-outline-primary">Registrar guardia</button>
+                                        
+                                        {% if guardia.profesor_asignado_id is not none %}
+                                            {# Si el profesor no tiene huella, permitimos marcarlo como presente/ausente desde Presencia #}
+                                            <input type="hidden" name="_dummy" value="0">
+                                        {% endif %}
                                     </form>
                                     {% elif not guardia.registrada %}
                                     <span class="text-secondary small">Sin profesores disponibles</span>
